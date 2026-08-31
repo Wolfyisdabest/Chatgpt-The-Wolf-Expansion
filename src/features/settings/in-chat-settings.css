@@ -1,0 +1,139 @@
+.wolf-settings-entry {
+  box-sizing: border-box;
+  color: inherit;
+  font: inherit;
+  margin: 0.15rem 0.5rem;
+}
+
+.wolf-open-settings {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 0.5rem;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  font-size: 0.78rem;
+  justify-content: space-between;
+  opacity: 0.68;
+  padding: 0.3rem 0.5rem;
+  text-align: left;
+  width: 100%;
+}
+
+.wolf-open-settings:hover,
+.wolf-open-settings:focus-visible,
+.wolf-settings-close:hover,
+.wolf-settings-close:focus-visible {
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  opacity: 1;
+  outline: none;
+}
+
+.wolf-open-settings:focus-visible,
+.wolf-settings-close:focus-visible,
+.wolf-settings-row input:focus-visible {
+  box-shadow: 0 0 0 2px currentColor;
+}
+
+.wolf-settings-overlay {
+  align-items: center;
+  background: rgb(0 0 0 / 48%);
+  color: inherit;
+  display: flex;
+  inset: 0;
+  justify-content: center;
+  padding: 1rem;
+  position: fixed;
+  z-index: 2147483646;
+}
+
+.wolf-settings-dialog {
+  background: var(--main-surface-primary, Canvas);
+  border: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  border-radius: 0.9rem;
+  box-shadow: 0 1.25rem 4rem rgb(0 0 0 / 28%);
+  color: inherit;
+  font: inherit;
+  max-height: min(42rem, calc(100vh - 2rem));
+  max-width: 30rem;
+  overflow: auto;
+  padding: 1rem;
+  width: 100%;
+}
+
+.wolf-settings-dialog:focus {
+  outline: none;
+}
+
+.wolf-settings-dialog-header {
+  align-items: center;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.wolf-settings-dialog-header h2 {
+  font-size: 1.15rem;
+  margin: 0;
+}
+
+.wolf-settings-close {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 0.4rem;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-size: 1.4rem;
+  height: 2rem;
+  justify-content: center;
+  width: 2rem;
+}
+
+.wolf-settings-form {
+  display: grid;
+  gap: 1rem;
+}
+
+.wolf-settings-form fieldset {
+  border: 1px solid color-mix(in srgb, currentColor 16%, transparent);
+  border-radius: 0.65rem;
+  margin: 0;
+  padding: 0.35rem 0.8rem;
+}
+
+.wolf-settings-form legend {
+  font-size: 0.85rem;
+  font-weight: 650;
+  padding: 0 0.3rem;
+}
+
+.wolf-settings-row {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  min-height: 2.75rem;
+}
+
+.wolf-settings-row + .wolf-settings-row {
+  border-top: 1px solid color-mix(in srgb, currentColor 10%, transparent);
+}
+
+.wolf-settings-row input {
+  accent-color: #10a37f;
+  height: 1.15rem;
+  width: 1.15rem;
+}
+
+.wolf-settings-status {
+  font-size: 0.78rem;
+  min-height: 1.2rem;
+  opacity: 0.68;
+}

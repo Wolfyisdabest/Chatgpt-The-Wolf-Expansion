@@ -1,0 +1,21 @@
+node_modules/
+dist/
+.npm-cache/
+.test-dist/
+
+# Logs and temporary files
+*.log
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# Editors
+.idea/
+.vscode/
+
+# OS metadata
+.DS_Store
+Thumbs.db
+desktop.ini

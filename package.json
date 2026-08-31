@@ -1,0 +1,26 @@
+{
+  "name": "chatgpt-the-wolf-expansion",
+  "version": "0.1.0-dev.5",
+  "private": true,
+  "description": "A modular, local-first Firefox and Floorp extension that adds power-user features to ChatGPT.",
+  "license": "GPL-3.0-only",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node scripts/test.mjs",
+    "watch": "node scripts/build.mjs --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/firefox-webext-browser": "143.0.0",
+    "@types/node": "26.4.0",
+    "esbuild": "0.28.2",
+    "typescript": "5.9.3"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
+  }
+}

@@ -1,0 +1,107 @@
+:root {
+  color-scheme: light dark;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background: Canvas;
+  color: CanvasText;
+  margin: 0;
+}
+
+main {
+  margin: 0 auto;
+  max-width: 46rem;
+  padding: 3rem 1.25rem;
+}
+
+header {
+  margin-bottom: 2rem;
+}
+
+.eyebrow {
+  font-size: 0.8rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  margin: 0 0 0.35rem;
+  opacity: 0.6;
+  text-transform: uppercase;
+}
+
+h1 {
+  font-size: clamp(1.8rem, 5vw, 2.6rem);
+  margin: 0;
+}
+
+.intro {
+  line-height: 1.5;
+  opacity: 0.72;
+}
+
+form {
+  display: grid;
+  gap: 1.25rem;
+}
+
+fieldset {
+  border: 1px solid color-mix(in srgb, CanvasText 18%, transparent);
+  border-radius: 0.8rem;
+  margin: 0;
+  padding: 0.5rem 1rem;
+}
+
+legend {
+  font-size: 1rem;
+  font-weight: 700;
+  padding: 0 0.4rem;
+}
+
+.setting-row {
+  align-items: center;
+  cursor: pointer;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  min-height: 4rem;
+  padding: 0.65rem 0.25rem;
+}
+
+.setting-row + .setting-row {
+  border-top: 1px solid color-mix(in srgb, CanvasText 12%, transparent);
+}
+
+.setting-row span {
+  display: grid;
+  gap: 0.25rem;
+}
+
+.setting-row small {
+  line-height: 1.35;
+  opacity: 0.68;
+}
+
+input[type="checkbox"] {
+  accent-color: #10a37f;
+  height: 1.25rem;
+  width: 1.25rem;
+}
+
+input[type="checkbox"]:focus-visible {
+  outline: 2px solid Highlight;
+  outline-offset: 3px;
+}
+
+.status {
+  min-height: 1.5rem;
+  padding: 0 0.25rem;
+}
+
+footer {
+  font-size: 0.8rem;
+  opacity: 0.58;
+  padding: 1rem 0.25rem;
+}

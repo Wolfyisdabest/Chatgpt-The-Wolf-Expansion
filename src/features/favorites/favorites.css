@@ -1,0 +1,222 @@
+[data-wolf-expansion="favorites-section"] {
+  box-sizing: border-box;
+  color: inherit;
+  font: inherit;
+  margin: 0.25rem 0.5rem;
+  min-width: 0;
+}
+
+.wolf-favorites-header,
+.wolf-favorite-link,
+.wolf-favorite-control,
+.wolf-favorite-row-button,
+.wolf-favorite-menu-action {
+  color: inherit;
+  font: inherit;
+}
+
+.wolf-debug-favorite-current {
+  background: transparent;
+  border: 0;
+  border-radius: 0.4rem;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.75rem;
+  margin: 0 0.5rem 0.25rem;
+  opacity: 0.72;
+  padding: 0.3rem 0.5rem;
+  text-align: left;
+}
+
+.wolf-debug-favorite-current:hover,
+.wolf-debug-favorite-current:focus-visible {
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  opacity: 1;
+  outline: none;
+}
+
+.wolf-debug-favorite-current:focus-visible {
+  box-shadow: inset 0 0 0 2px currentColor;
+}
+
+.wolf-debug-favorite-current:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+.wolf-favorites-header {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  display: flex;
+  gap: 0.4rem;
+  min-height: 2rem;
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+  width: 100%;
+}
+
+.wolf-favorites-header:hover,
+.wolf-favorites-header:focus-visible,
+.wolf-favorite-link:hover,
+.wolf-favorite-link:focus-visible,
+.wolf-favorite-control:hover:not(:disabled),
+.wolf-favorite-control:focus-visible,
+.wolf-favorite-row-button:hover,
+.wolf-favorite-row-button:focus-visible,
+.wolf-favorite-menu-action:hover,
+.wolf-favorite-menu-action:focus-visible {
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  outline: none;
+}
+
+.wolf-favorites-header:focus-visible,
+.wolf-favorite-link:focus-visible,
+.wolf-favorite-control:focus-visible,
+.wolf-favorite-row-button:focus-visible,
+.wolf-favorite-menu-action:focus-visible {
+  box-shadow: inset 0 0 0 2px currentColor;
+}
+
+.wolf-favorites-chevron {
+  align-items: center;
+  display: inline-flex;
+  font-size: 1rem;
+  justify-content: center;
+  width: 1rem;
+}
+
+.wolf-favorites-heading {
+  font-size: 0.875rem;
+  font-weight: 600;
+  min-width: 0;
+}
+
+.wolf-favorites-count {
+  font-size: 0.75rem;
+  margin-left: auto;
+  opacity: 0.62;
+}
+
+.wolf-favorites-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.wolf-favorite-item {
+  align-items: center;
+  border-radius: 0.5rem;
+  display: flex;
+  min-height: 2.25rem;
+  min-width: 0;
+  position: relative;
+}
+
+.wolf-favorite-item.wolf-is-dragging {
+  opacity: 0.45;
+}
+
+.wolf-favorite-item.wolf-is-drop-target {
+  box-shadow: inset 0 2px 0 currentColor;
+}
+
+.wolf-favorite-link {
+  border-radius: 0.5rem;
+  display: block;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0.5rem 4.75rem 0.5rem 1.4rem;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wolf-favorite-controls {
+  align-items: center;
+  display: flex;
+  opacity: 0;
+  position: absolute;
+  right: 0.25rem;
+  transition: opacity 120ms ease;
+}
+
+.wolf-favorite-item:hover .wolf-favorite-controls,
+.wolf-favorite-item:focus-within .wolf-favorite-controls {
+  opacity: 1;
+}
+
+.wolf-favorite-control,
+.wolf-favorite-row-button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 0.35rem;
+  cursor: pointer;
+  display: inline-flex;
+  height: 1.75rem;
+  justify-content: center;
+  padding: 0;
+  width: 1.5rem;
+}
+
+.wolf-favorite-control:disabled {
+  cursor: default;
+  opacity: 0.22;
+}
+
+.wolf-favorites-empty {
+  font-size: 0.8125rem;
+  opacity: 0.62;
+  padding: 0.45rem 0.5rem 0.45rem 1.4rem;
+}
+
+.wolf-row-actions {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  margin-inline-end: 0.125rem;
+}
+
+.wolf-row-actions[data-insertion-strategy="row-owned-sibling"] {
+  margin-inline-start: auto;
+}
+
+.wolf-favorite-row-button {
+  opacity: 0.72;
+  position: static;
+}
+
+.wolf-favorite-row-button:hover,
+.wolf-favorite-row-button:focus-visible,
+.wolf-favorite-row-button.wolf-is-favorite {
+  opacity: 1;
+}
+
+.wolf-favorite-row-button.wolf-is-favorite {
+  color: #d5a000;
+}
+
+.wolf-favorite-menu-action {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 0.45rem;
+  cursor: pointer;
+  display: flex;
+  min-height: 2.25rem;
+  padding: 0.55rem 0.75rem;
+  text-align: left;
+  width: calc(100% - 0.5rem);
+  margin: 0.125rem 0.25rem;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wolf-favorite-controls {
+    transition: none;
+  }
+}

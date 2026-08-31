@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Wolf Expansion Settings</title>
+    <link rel="stylesheet" href="options.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="eyebrow">ChatGPT</p>
+        <h1>The Wolf Expansion</h1>
+        <p class="intro">Settings are stored locally in Firefox and apply to open ChatGPT tabs.</p>
+      </header>
+
+      <form id="settings-form">
+        <fieldset>
+          <legend>General</legend>
+          <label class="setting-row">
+            <span>
+              <strong>Enable Wolf Expansion</strong>
+              <small>Turns all extension features on or off.</small>
+            </span>
+            <input id="enabled" type="checkbox" />
+          </label>
+          <label class="setting-row">
+            <span>
+              <strong>Debug logging</strong>
+              <small>Writes local diagnostic events to the ChatGPT tab console.</small>
+            </span>
+            <input id="debug-enabled" type="checkbox" />
+          </label>
+        </fieldset>
+
+        <fieldset>
+          <legend>Sidebar</legend>
+          <label class="setting-row">
+            <span>
+              <strong>Enable Favorites</strong>
+              <small>Shows extension-owned favorite conversations in ChatGPT.</small>
+            </span>
+            <input id="favorites-enabled" type="checkbox" />
+          </label>
+          <label class="setting-row">
+            <span>
+              <strong>Show Favorites icon</strong>
+              <small>Displays the star beside the Favorites heading.</small>
+            </span>
+            <input id="favorites-show-icon" type="checkbox" />
+          </label>
+          <label class="setting-row">
+            <span>
+              <strong>Remember collapsed state</strong>
+              <small>Keeps the Favorites section collapsed or expanded between sessions.</small>
+            </span>
+            <input id="favorites-remember-collapsed" type="checkbox" />
+          </label>
+        </fieldset>
+      </form>
+
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+      <footer>v0.1.0-dev.5 · No telemetry · No account required</footer>
+    </main>
+    <script src="options.js"></script>
+  </body>
+</html>

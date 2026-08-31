@@ -1,0 +1,47 @@
+import { build } from "esbuild";
+import { rm } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import path from "node:path";
+
+const root = process.cwd();
+const outputDirectory = path.join(root, ".test-dist");
+const tests = [
+  "tests/conversationIdentity.test.ts",
+  "tests/conversationUrl.test.ts",
+  "tests/favorites.test.ts",
+  "tests/menuContext.test.ts",
+  "tests/settings.test.ts",
+];
+
+await rm(outputDirectory, { recursive: true, force: true });
+
+try {
+  await build({
+    entryPoints: tests,
+    bundle: true,
+    entryNames: "[name]",
+    format: "esm",
+    outdir: outputDirectory,
+    platform: "node",
+    target: "node20",
+    sourcemap: false,
+    logLevel: "warning",
+  });
+
+  const generatedTests = tests.map((testFile) =>
+    path.join(outputDirectory, `${path.basename(testFile, ".ts")}.js`),
+  );
+  const testProcess = spawn(process.execPath, ["--test", ...generatedTests], {
+    cwd: root,
+    stdio: "inherit",
+  });
+  const exitCode = await new Promise((resolve, reject) => {
+    testProcess.once("error", reject);
+    testProcess.once("exit", (code) => resolve(code ?? 1));
+  });
+  if (exitCode !== 0) {
+    process.exitCode = exitCode;
+  }
+} finally {
+  await rm(outputDirectory, { recursive: true, force: true });
+}
