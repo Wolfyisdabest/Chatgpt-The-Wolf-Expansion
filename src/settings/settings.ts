@@ -23,6 +23,7 @@ export interface SettingsUpdate {
     enabled?: boolean;
     rememberCollapsed?: boolean;
     showIcons?: boolean;
+    chatNameDisplayOverrides?: Record<string, ItemNameDisplayMode>;
   };
 }
 
@@ -59,6 +60,9 @@ export class SettingsService {
         rememberCollapsed:
           update.folders?.rememberCollapsed ?? current.folders.rememberCollapsed,
         showIcons: update.folders?.showIcons ?? current.folders.showIcons,
+        chatNameDisplayOverrides:
+          update.folders?.chatNameDisplayOverrides ??
+          current.folders.chatNameDisplayOverrides,
       },
     };
     await this.save(next);
@@ -67,5 +71,19 @@ export class SettingsService {
 
   public subscribe(listener: () => void): Unsubscribe {
     return this.storage.subscribe(STORAGE_KEYS.settings, listener);
+  }
+
+  public async setFolderChatNameDisplay(
+    folderId: string,
+    mode: ItemNameDisplayMode | null,
+  ): Promise<WolfExpansionSettings> {
+    const settings = await this.get();
+    const overrides = { ...settings.folders.chatNameDisplayOverrides };
+    if (mode) {
+      overrides[folderId] = mode;
+    } else {
+      delete overrides[folderId];
+    }
+    return this.update({ folders: { chatNameDisplayOverrides: overrides } });
   }
 }

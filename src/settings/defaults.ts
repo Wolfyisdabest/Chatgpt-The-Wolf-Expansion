@@ -16,5 +16,6 @@ export const DEFAULT_SETTINGS: WolfExpansionSettings = {
     enabled: true,
     rememberCollapsed: true,
     showIcons: true,
+    chatNameDisplayOverrides: {},
   },
 };

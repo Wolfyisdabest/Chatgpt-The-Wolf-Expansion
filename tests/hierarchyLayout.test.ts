@@ -51,6 +51,38 @@ test("hidden action controls do not reserve permanent row width", () => {
   assert.match(css, /\.wolf-item-name-viewport\s*\{[^}]*flex:\s*1;[^}]*min-width:\s*0;/s);
 });
 
+test("chat rows do not reserve fake folder control spacers", () => {
+  const source = readFileSync(
+    path.join(process.cwd(), "src/features/quickAccess/QuickAccessSidebar.ts"),
+    "utf8",
+  );
+  assert.doesNotMatch(source, /wolf-chat-hierarchy-spacer/);
+});
+
+test("only actual child regions receive subtle tree connectors", () => {
+  const source = readFileSync(
+    path.join(process.cwd(), "src/features/quickAccess/QuickAccessSidebar.ts"),
+    "utf8",
+  );
+  const css = readFileSync(
+    path.join(process.cwd(), "src/features/quickAccess/quick-access.css"),
+    "utf8",
+  );
+  assert.match(source, /classList\.toggle\("wolf-tree-child-region", parentId !== null\)/);
+  assert.match(css, /\.wolf-tree-child-region[^}]*::before/s);
+  assert.match(css, /pointer-events:\s*none;/);
+  assert.match(css, /color-mix\(in srgb, currentColor 22%, transparent\)/);
+});
+
+test("collapsed folder content hides its child connectors with the child region", () => {
+  const css = readFileSync(
+    path.join(process.cwd(), "src/features/quickAccess/quick-access.css"),
+    "utf8",
+  );
+  assert.match(css, /\.wolf-quick-access-children\.wolf-is-collapsed[^}]*grid-template-rows:\s*minmax\(0, 0fr\)/s);
+  assert.match(css, /\.wolf-quick-access-children-content[^}]*overflow:\s*hidden;/s);
+});
+
 test("deep nesting retains the established visual indentation cap", () => {
   const css = readFileSync(
     path.join(process.cwd(), "src/features/quickAccess/quick-access.css"),

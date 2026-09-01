@@ -25,6 +25,7 @@ export class WolfExpansionApp {
   private readonly settingsFeature = new InChatSettingsFeature(
     this.adapter,
     this.settingsService,
+    this.foldersRepository,
     this.sidebarRoot,
     this.logger,
   );
@@ -33,6 +34,7 @@ export class WolfExpansionApp {
     this.favoritesRepository,
     this.foldersRepository,
     this.quickAccessUiStateRepository,
+    this.settingsService,
     this.sidebarRoot,
     this.logger,
   );

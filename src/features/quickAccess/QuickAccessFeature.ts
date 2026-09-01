@@ -11,6 +11,7 @@ import type { WolfSidebarRoot } from "../../core/WolfSidebarRoot";
 import { debounce } from "../../shared/events";
 import type { Feature, Unsubscribe } from "../../shared/types";
 import type { WolfExpansionSettings } from "../../storage/schemas";
+import { SettingsService } from "../../settings/settings";
 import { FavoritesRepository } from "../favorites/FavoritesRepository";
 import { FoldersRepository } from "../folders/FoldersRepository";
 import { QuickAccessMenuIntegration } from "./QuickAccessMenuIntegration";
@@ -45,6 +46,7 @@ export class QuickAccessFeature implements Feature {
     private readonly favoritesRepository: FavoritesRepository,
     private readonly foldersRepository: FoldersRepository,
     private readonly uiStateRepository: QuickAccessUiStateRepository,
+    private readonly settingsService: SettingsService,
     sidebarRoot: WolfSidebarRoot,
     private readonly logger: Logger,
   ) {
@@ -89,6 +91,10 @@ export class QuickAccessFeature implements Feature {
         onMoveFolderByOne: (folderId, direction) =>
           this.foldersRepository.reorderFolder(folderId, direction),
         onDeleteFolder: (folderId) => this.foldersRepository.deleteFolder(folderId),
+        onSetFolderChatNameDisplay: async (folderId, mode) => {
+          const settings = await this.settingsService.setFolderChatNameDisplay(folderId, mode);
+          await this.setSettings(settings);
+        },
         onAssignConversation: async (folderId, conversation, source) => {
           await this.membershipService.assignToFolder(folderId, conversation);
           if (source === "quick-access-chat") {
@@ -249,6 +255,8 @@ export class QuickAccessFeature implements Feature {
       const projection = buildQuickAccessProjection(favorites, displayFolders, memberships, {
         quickAccessEnabled: settings.favorites.enabled,
         foldersEnabled: settings.folders.enabled,
+        globalItemNameDisplay: settings.favorites.itemNameDisplay,
+        folderChatNameDisplayOverrides: settings.folders.chatNameDisplayOverrides,
       });
       const currentId = this.adapter.getCurrentConversationId();
       const currentIsQuickAccess = currentId

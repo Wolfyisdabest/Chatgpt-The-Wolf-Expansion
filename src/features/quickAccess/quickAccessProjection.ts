@@ -4,6 +4,8 @@ import type {
   FolderRecord,
 } from "../../storage/schemas";
 import { normalizeConversationTitle } from "../../adapters/chatgpt/conversationIdentity";
+import { resolveChatNameDisplayMode } from "../../settings/folderDisplayMode";
+import type { ItemNameDisplayMode } from "../../storage/schemas";
 
 export interface QuickAccessChatView {
   conversationId: string;
@@ -12,6 +14,7 @@ export interface QuickAccessChatView {
   sortIndex: number;
   isQuickAccess: boolean;
   folderId: string | null;
+  nameDisplayMode: ItemNameDisplayMode;
 }
 
 export interface QuickAccessFolderView {
@@ -29,6 +32,8 @@ export interface QuickAccessProjection {
 export interface QuickAccessProjectionOptions {
   quickAccessEnabled: boolean;
   foldersEnabled: boolean;
+  globalItemNameDisplay?: ItemNameDisplayMode;
+  folderChatNameDisplayOverrides?: Readonly<Record<string, ItemNameDisplayMode>>;
 }
 
 export function buildQuickAccessProjection(
@@ -42,6 +47,8 @@ export function buildQuickAccessProjection(
   }
 
   const favoriteIds = new Set(favorites.map((favorite) => favorite.conversationId));
+  const globalItemNameDisplay = options.globalItemNameDisplay ?? "compact";
+  const folderChatNameDisplayOverrides = options.folderChatNameDisplayOverrides ?? {};
   const visibleFolderIds = options.foldersEnabled
     ? new Set(folders.map((folder) => folder.id))
     : new Set<string>();
@@ -62,6 +69,7 @@ export function buildQuickAccessProjection(
         sortIndex: favorite.sortIndex,
         isQuickAccess: true,
         folderId: null,
+        nameDisplayMode: globalItemNameDisplay,
       }))
     : [];
 
@@ -88,6 +96,12 @@ export function buildQuickAccessProjection(
       sortIndex: membership.sortIndex,
       isQuickAccess: true,
       folderId: membership.folderId,
+      nameDisplayMode: resolveChatNameDisplayMode(
+        membership.folderId,
+        folders,
+        folderChatNameDisplayOverrides,
+        globalItemNameDisplay,
+      ),
     });
   }
 

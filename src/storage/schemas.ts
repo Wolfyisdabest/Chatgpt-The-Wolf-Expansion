@@ -1,4 +1,4 @@
-export const STORAGE_SCHEMA_VERSION = 5;
+export const STORAGE_SCHEMA_VERSION = 6;
 
 export type ItemNameDisplayMode = "compact" | "full";
 
@@ -67,5 +67,6 @@ export interface WolfExpansionSettings {
     enabled: boolean;
     rememberCollapsed: boolean;
     showIcons: boolean;
+    chatNameDisplayOverrides: Record<string, ItemNameDisplayMode>;
   };
 }

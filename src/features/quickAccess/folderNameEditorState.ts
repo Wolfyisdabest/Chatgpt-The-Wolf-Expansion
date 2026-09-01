@@ -43,11 +43,15 @@ export class FolderNameEditorController {
   }
 
   public resolveEnter(): FolderNameEditorResolution | null {
-    return this.resolve(false);
+    return this.resolve();
   }
 
   public resolveBlur(): FolderNameEditorResolution | null {
-    return this.resolve(true);
+    return null;
+  }
+
+  public resolveOutsidePointer(): FolderNameEditorResolution | null {
+    return this.cancel();
   }
 
   public cancel(): FolderNameEditorResolution | null {
@@ -63,18 +67,14 @@ export class FolderNameEditorController {
     return this.state?.kind === "rename" && this.state.folderId === folderId;
   }
 
-  private resolve(fromBlur: boolean): FolderNameEditorResolution | null {
+  private resolve(): FolderNameEditorResolution | null {
     const state = this.activeState;
     if (!state) {
       return null;
     }
     const name = state.draft.trim();
     if (!name) {
-      if (!fromBlur) {
-        return { status: "invalid", state };
-      }
-      this.state = null;
-      return { status: "cancel", state };
+      return { status: "invalid", state };
     }
     if (state.kind === "rename" && name === state.originalName) {
       this.state = null;

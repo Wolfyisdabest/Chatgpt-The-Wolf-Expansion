@@ -78,23 +78,28 @@ test("empty and whitespace-only Enter remain invalid and keep the editor active"
   assert.notEqual(editor.activeState, null);
 });
 
-test("blur commits a valid changed name, exits unchanged, and cancels invalid input", () => {
+test("focus change alone neither commits nor cancels an editor", () => {
   const changed = new FolderNameEditorController();
   changed.startRename("folder-id", "Before");
   changed.updateDraft("After");
-  assert.equal(changed.resolveBlur()?.status, "commit");
-  assert.equal(changed.activeState, null);
+  assert.equal(changed.resolveBlur(), null);
+  assert.equal(changed.activeState?.draft, "After");
+});
 
-  const unchanged = new FolderNameEditorController();
-  unchanged.startRename("folder-id", "Same");
-  assert.equal(unchanged.resolveBlur()?.status, "unchanged");
-  assert.equal(unchanged.activeState, null);
+test("outside pointer cancellation discards rename and create drafts", () => {
+  const rename = new FolderNameEditorController();
+  rename.startRename("folder-id", "Original");
+  rename.updateDraft("Discard me");
+  const renameResult = rename.resolveOutsidePointer();
+  assert.equal(renameResult?.status, "cancel");
+  assert.equal(renameResult?.state.kind === "rename" ? renameResult.state.originalName : null, "Original");
+  assert.equal(rename.activeState, null);
 
-  const invalid = new FolderNameEditorController();
-  invalid.startRename("folder-id", "Before");
-  invalid.updateDraft("  ");
-  assert.equal(invalid.resolveBlur()?.status, "cancel");
-  assert.equal(invalid.activeState, null);
+  const create = new FolderNameEditorController();
+  create.startCreate("parent-id");
+  create.updateDraft("Discard folder");
+  assert.equal(create.resolveOutsidePointer()?.status, "cancel");
+  assert.equal(create.activeState, null);
 });
 
 test("creation rejects empty input, accepts duplicate names, and clears after commit", async () => {

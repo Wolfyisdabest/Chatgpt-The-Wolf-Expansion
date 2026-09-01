@@ -7,7 +7,12 @@ import type { Logger } from "../../core/logger";
 import type { WolfSidebarRoot } from "../../core/WolfSidebarRoot";
 import { createWolfElement } from "../../shared/dom";
 import { createIcon } from "../../shared/icons";
-import type { FolderRecord, WolfExpansionSettings } from "../../storage/schemas";
+import type {
+  FolderRecord,
+  ItemNameDisplayMode,
+  WolfExpansionSettings,
+} from "../../storage/schemas";
+import { getFolderChatNameDisplayChoice } from "../../settings/folderDisplayMode";
 import { wouldCreateFolderCycle } from "../folders/FoldersRepository";
 import {
   getValidFolderDestinations,
@@ -34,6 +39,10 @@ import {
   getChevronPresentation,
   getQuickAccessHierarchyLayout,
 } from "./hierarchyLayout";
+import {
+  shouldCancelFolderNameEditor,
+  shouldCloseFolderMenu,
+} from "./outsideInteraction";
 
 interface QuickAccessSidebarCallbacks {
   onSectionCollapseChange(collapsed: boolean): Promise<void>;
@@ -46,6 +55,10 @@ interface QuickAccessSidebarCallbacks {
   onMoveFolder(folderId: string, parentId: string | null, targetIndex?: number): Promise<void>;
   onMoveFolderByOne(folderId: string, direction: -1 | 1): Promise<void>;
   onDeleteFolder(folderId: string): Promise<void>;
+  onSetFolderChatNameDisplay(
+    folderId: string,
+    mode: ItemNameDisplayMode | null,
+  ): Promise<void>;
   onAssignConversation(
     folderId: string,
     conversation: NormalizedConversationIdentity,
@@ -96,6 +109,7 @@ export class QuickAccessSidebar {
   private lastRenderSignature: string | null = null;
   private readonly conversations = new Map<string, NormalizedConversationIdentity>();
   private readonly nativeDraggableStates = new Map<HTMLElement, string | null>();
+  private folderMenuGuardInstalled = false;
 
   public constructor(
     private readonly adapter: ChatGPTAdapter,
@@ -131,6 +145,7 @@ export class QuickAccessSidebar {
     );
     if (this.lastRenderSignature === renderSignature && section.childElementCount > 0) {
       this.finishEditorReconciliation(editorSnapshot);
+      this.syncFolderMenuOutsideGuard();
       this.logger.debug("Wolf root moved without rebuilding Quick Access content.");
       return;
     }
@@ -230,6 +245,7 @@ export class QuickAccessSidebar {
     section.append(status);
     this.lastRenderSignature = renderSignature;
     this.finishEditorReconciliation(editorSnapshot);
+    this.syncFolderMenuOutsideGuard();
   }
 
   public syncNativeRows(
@@ -319,6 +335,7 @@ export class QuickAccessSidebar {
     this.adapter.cleanupConversationActionHosts();
     this.dragPayload = null;
     this.editorMode = null;
+    this.removeFolderMenuOutsideGuard();
     this.cancelNameEditor(false);
   }
 
@@ -332,6 +349,7 @@ export class QuickAccessSidebar {
     const folderRegion = createWolfElement("div", "folder-region");
     folderRegion.className = "wolf-folder-region";
     folderRegion.dataset.parentId = parentId ?? "";
+    folderRegion.classList.toggle("wolf-tree-child-region", parentId !== null);
     folders.forEach((folder, index) => {
       folderRegion.append(
         this.createInsertionTarget("folder-insert", parentId, index, depth),
@@ -346,6 +364,7 @@ export class QuickAccessSidebar {
     const chatRegion = createWolfElement("div", "chat-region");
     chatRegion.className = "wolf-chat-region";
     chatRegion.dataset.parentId = parentId ?? "";
+    chatRegion.classList.toggle("wolf-tree-child-region", parentId !== null);
     chats.forEach((chat, index) => {
       chatRegion.append(
         this.createInsertionTarget("chat-insert", parentId, index, depth),
@@ -369,6 +388,8 @@ export class QuickAccessSidebar {
     item.dataset.folderId = node.folder.id;
     item.dataset.wolfDragKind = "folder";
     item.dataset.wolfDropKind = "folder";
+    item.dataset.hasParent = String(depth > 0);
+    item.dataset.itemNameDisplay = this.settings?.favorites.itemNameDisplay ?? "compact";
     item.draggable = isFolderDraggable(this.nameEditor.activeState, node.folder.id);
     item.setAttribute("role", "treeitem");
     item.setAttribute("aria-expanded", String(!node.folder.collapsed));
@@ -395,7 +416,10 @@ export class QuickAccessSidebar {
     if (this.settings?.folders.showIcons) {
       name.append(createIcon("folder"));
     }
-    name.append(this.createItemNameViewport(node.folder.name));
+    name.append(this.createItemNameViewport(
+      node.folder.name,
+      this.settings?.favorites.itemNameDisplay ?? "compact",
+    ));
     name.title = node.folder.name;
     const controls = document.createElement("span");
     controls.className = "wolf-quick-access-controls";
@@ -404,6 +428,7 @@ export class QuickAccessSidebar {
       this.createFolderOrderButton(node.folder, 1, index === siblingCount - 1),
     );
     const actions = this.createIconButton("more", `Manage ${node.folder.name}`);
+    actions.dataset.folderMenuTrigger = node.folder.id;
     actions.addEventListener("click", () => {
       this.cancelNameEditor(false);
       this.editorMode = this.editorMode?.kind === "actions" &&
@@ -452,6 +477,8 @@ export class QuickAccessSidebar {
     item.dataset.wolfDragKind = chat.folderId ? "folder-chat" : "quick-access-chat";
     item.dataset.sourceFolderId = chat.folderId ?? "";
     item.dataset.isQuickAccess = String(chat.isQuickAccess);
+    item.dataset.hasParent = String(depth > 0);
+    item.dataset.itemNameDisplay = chat.nameDisplayMode;
     item.draggable = true;
     const hierarchyLayout = getQuickAccessHierarchyLayout(depth, "chat");
     item.dataset.logicalDepth = String(hierarchyLayout.logicalDepth);
@@ -462,12 +489,9 @@ export class QuickAccessSidebar {
     const link = createWolfElement("a", "quick-access-chat-link");
     link.className = "wolf-quick-access-chat-link";
     link.href = chat.url;
-    link.append(this.createItemNameViewport(nameSemantics.visibleText));
+    link.append(this.createItemNameViewport(nameSemantics.visibleText, chat.nameDisplayMode));
     link.title = nameSemantics.tooltip;
     link.setAttribute("aria-label", nameSemantics.accessibleName);
-    const hierarchySpacer = document.createElement("span");
-    hierarchySpacer.className = "wolf-chat-hierarchy-spacer";
-    hierarchySpacer.setAttribute("aria-hidden", "true");
     const controls = document.createElement("span");
     controls.className = "wolf-quick-access-controls";
     if (chat.folderId) {
@@ -503,7 +527,7 @@ export class QuickAccessSidebar {
         this.callbacks.onRemoveQuickAccess(chat.conversationId)));
       controls.append(remove);
     }
-    item.append(hierarchySpacer, link, controls);
+    item.append(link, controls);
     return item;
   }
 
@@ -545,12 +569,43 @@ export class QuickAccessSidebar {
       return document.createElement("span");
     }
     if (mode.kind === "actions") {
-      const panel = this.createEditorPanel();
+      const panel = this.createEditorPanel(node.folder.id);
+      const displayRow = document.createElement("label");
+      displayRow.className = "wolf-folder-display-choice";
+      const displayLabel = document.createElement("span");
+      displayLabel.textContent = "Chat name display";
+      const displaySelect = document.createElement("select");
+      displaySelect.className = "wolf-quick-access-select";
+      for (const [value, label] of [
+        ["inherit", "Use inherited/default"],
+        ["compact", "Compact"],
+        ["full", "Full"],
+      ] as const) {
+        const option = document.createElement("option");
+        option.value = value;
+        option.textContent = label;
+        displaySelect.append(option);
+      }
+      displaySelect.value = getFolderChatNameDisplayChoice(
+        node.folder.id,
+        this.settings?.folders.chatNameDisplayOverrides ?? {},
+      );
+      displaySelect.addEventListener("change", () => {
+        const mode = displaySelect.value === "compact" || displaySelect.value === "full"
+          ? displaySelect.value
+          : null;
+        this.editorMode = null;
+        this.removeFolderMenuOutsideGuard();
+        void this.runSafely(() =>
+          this.callbacks.onSetFolderChatNameDisplay(node.folder.id, mode));
+      });
+      displayRow.append(displayLabel, displaySelect);
       panel.append(
         this.createEditorActionButton("New subfolder", () =>
           this.beginCreateFolder(node.folder.id)),
         this.createEditorActionButton("Rename", () =>
           this.beginRenameFolder(node.folder)),
+        displayRow,
         this.createModeButton("Move into…", { kind: "move", folderId: node.folder.id }),
       );
       const parent = this.getFolderRecord(node.folder.parentId);
@@ -577,7 +632,7 @@ export class QuickAccessSidebar {
       return panel;
     }
     if (mode.kind === "delete") {
-      const panel = this.createEditorPanel();
+      const panel = this.createEditorPanel(node.folder.id);
       const warning = document.createElement("span");
       warning.textContent = `Delete “${mode.name}”? Chats will be unfiled and subfolders preserved.`;
       const remove = this.createOperationButton("Delete", () =>
@@ -586,7 +641,7 @@ export class QuickAccessSidebar {
       panel.append(warning, remove, this.createCancelButton());
       return panel;
     }
-    const panel = this.createEditorPanel();
+    const panel = this.createEditorPanel(node.folder.id);
     const select = document.createElement("select");
     select.className = "wolf-quick-access-select";
     const destinations = getValidFolderDestinations(this.getFolderRecords(), node.folder.id);
@@ -956,9 +1011,13 @@ export class QuickAccessSidebar {
       });
   }
 
-  private createItemNameViewport(value: string): HTMLSpanElement {
+  private createItemNameViewport(
+    value: string,
+    displayMode: ItemNameDisplayMode,
+  ): HTMLSpanElement {
     const viewport = document.createElement("span");
     viewport.className = "wolf-item-name-viewport";
+    viewport.dataset.itemNameDisplay = displayMode;
     viewport.title = value;
     const text = document.createElement("span");
     text.className = "wolf-item-name-text";
@@ -991,7 +1050,7 @@ export class QuickAccessSidebar {
       clearRevealTimeout();
       clearResetTimeout();
       delete viewport.dataset.revealReturning;
-      if (this.settings?.favorites.itemNameDisplay !== "compact") {
+      if (viewport.dataset.itemNameDisplay !== "compact") {
         return;
       }
       const availableWidth = this.getItemNameRevealWidth(viewport);
@@ -1105,7 +1164,7 @@ export class QuickAccessSidebar {
         : `Folder creation editor keydown key=${describeEditorKey(event.key)}`);
       if (event.key === "Enter") {
         event.preventDefault();
-        this.resolveNameEditor("enter", input);
+        this.resolveNameEditor(input);
         return;
       }
       if (event.key === "Escape") {
@@ -1160,7 +1219,7 @@ export class QuickAccessSidebar {
     form.addEventListener("submit", (event) => {
       event.preventDefault();
       event.stopPropagation();
-      this.resolveNameEditor("enter", input);
+      this.resolveNameEditor(input);
     });
     this.isolateNameEditorPointerEvents(form);
     this.activeNameEditorForm = form;
@@ -1191,11 +1250,9 @@ export class QuickAccessSidebar {
     this.focusEditor(true);
   }
 
-  private resolveNameEditor(reason: "enter" | "blur", input: HTMLInputElement): void {
+  private resolveNameEditor(input: HTMLInputElement): void {
     this.nameEditor.updateDraft(input.value);
-    const resolution = reason === "enter"
-      ? this.nameEditor.resolveEnter()
-      : this.nameEditor.resolveBlur();
+    const resolution = this.nameEditor.resolveEnter();
     if (!resolution) {
       return;
     }
@@ -1237,10 +1294,39 @@ export class QuickAccessSidebar {
 
   private cancelNameEditor(rerender = true): void {
     const resolution = this.nameEditor.cancel();
-    if (resolution) {
-      this.logNameEditorCancellation(resolution.state);
+    if (!resolution) {
+      return;
     }
+    this.logNameEditorCancellation(resolution.state);
     this.finishNameEditor(rerender);
+  }
+
+  private cancelNameEditorFromOutside(): void {
+    const activeForm = this.activeNameEditorForm;
+    const resolution = this.nameEditor.resolveOutsidePointer();
+    if (!resolution) {
+      return;
+    }
+    this.logNameEditorCancellation(resolution.state);
+    this.editorMode = null;
+    this.restoreEditedFolderDraggable(resolution.state);
+    this.discardNameEditorDom();
+    activeForm?.remove();
+    this.lastRenderSignature = null;
+    this.logger.debug("Folder name editor cancelled by outside pointer input.");
+  }
+
+  private restoreEditedFolderDraggable(state: FolderNameEditorState): void {
+    const folderId = state.kind === "rename" ? state.folderId : state.parentId;
+    if (!folderId) {
+      return;
+    }
+    const folder = this.section?.querySelector<HTMLElement>(
+      `[data-wolf-expansion="quick-access-folder"][data-folder-id="${CSS.escape(folderId)}"]`,
+    );
+    if (folder) {
+      folder.draggable = true;
+    }
   }
 
   private logNameEditorCancellation(state: FolderNameEditorState): void {
@@ -1335,7 +1421,6 @@ export class QuickAccessSidebar {
       return;
     }
     if (this.editorIntentionalBlur) {
-      this.resolveNameEditor("blur", input);
       return;
     }
     this.logger.debug("Rename editor focus was moved programmatically; restoring it.");
@@ -1350,11 +1435,58 @@ export class QuickAccessSidebar {
     document.removeEventListener("pointerdown", this.handleEditorDocumentPointerDown, true);
   }
 
+  private syncFolderMenuOutsideGuard(): void {
+    if (this.editorMode && !this.folderMenuGuardInstalled) {
+      document.addEventListener("pointerdown", this.handleFolderMenuDocumentPointerDown, true);
+      this.folderMenuGuardInstalled = true;
+    } else if (!this.editorMode) {
+      this.removeFolderMenuOutsideGuard();
+    }
+  }
+
+  private removeFolderMenuOutsideGuard(): void {
+    if (!this.folderMenuGuardInstalled) {
+      return;
+    }
+    document.removeEventListener("pointerdown", this.handleFolderMenuDocumentPointerDown, true);
+    this.folderMenuGuardInstalled = false;
+  }
+
+  private readonly handleFolderMenuDocumentPointerDown = (event: PointerEvent): void => {
+    const mode = this.editorMode;
+    const target = event.target;
+    if (!mode || !(target instanceof Node)) {
+      return;
+    }
+    const panel = this.section?.querySelector<HTMLElement>(
+      `[data-wolf-expansion="quick-access-folder-editor"][data-folder-id="${CSS.escape(mode.folderId)}"]`,
+    );
+    const trigger = this.section?.querySelector<HTMLElement>(
+      `[data-folder-menu-trigger="${CSS.escape(mode.folderId)}"]`,
+    );
+    if (!shouldCloseFolderMenu(
+      panel?.contains(target) ?? false,
+      trigger?.contains(target) ?? false,
+    )) {
+      return;
+    }
+    this.editorMode = null;
+    panel?.remove();
+    this.lastRenderSignature = null;
+    this.removeFolderMenuOutsideGuard();
+    this.logger.debug("Folder action menu closed by outside pointer input.", {
+      folderId: mode.folderId,
+    });
+  };
+
   private readonly handleEditorDocumentPointerDown = (event: PointerEvent): void => {
     const target = event.target;
-    this.editorIntentionalBlur = !(
-      target instanceof Node && this.activeNameEditorForm?.contains(target)
-    );
+    const insideEditor = target instanceof Node &&
+      (this.activeNameEditorForm?.contains(target) ?? false);
+    this.editorIntentionalBlur = !insideEditor;
+    if (shouldCancelFolderNameEditor(insideEditor)) {
+      this.cancelNameEditorFromOutside();
+    }
   };
 
   private readonly keepEditorFocusDuringButtonPress = (event: PointerEvent): void => {
@@ -1372,9 +1504,10 @@ export class QuickAccessSidebar {
     });
   }
 
-  private createEditorPanel(): HTMLDivElement {
+  private createEditorPanel(folderId: string): HTMLDivElement {
     const panel = createWolfElement("div", "quick-access-folder-editor");
     panel.className = "wolf-quick-access-editor";
+    panel.dataset.folderId = folderId;
     return panel;
   }
 
@@ -1406,6 +1539,7 @@ export class QuickAccessSidebar {
     button.textContent = label;
     button.addEventListener("click", () => {
       this.editorMode = null;
+      this.removeFolderMenuOutsideGuard();
       void this.runSafely(operation);
     });
     return button;

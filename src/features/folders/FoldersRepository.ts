@@ -6,6 +6,7 @@ import {
   normalizeFolderMembership,
   normalizeFolders,
   normalizeFoldersUiState,
+  normalizeSettings,
 } from "../../storage/migrations";
 import {
   STORAGE_KEYS,
@@ -137,7 +138,17 @@ export class FoldersRepository {
       const memberships = (await this.listMembership()).filter(
         (membership) => membership.folderId !== folderId,
       );
-      await this.saveFoldersAndMembership(retainedFolders, memberships);
+      const settings = normalizeSettings(
+        await this.storage.get<unknown>(STORAGE_KEYS.settings, undefined),
+      );
+      const chatNameDisplayOverrides = {
+        ...settings.folders.chatNameDisplayOverrides,
+      };
+      delete chatNameDisplayOverrides[folderId];
+      await this.saveFoldersAndMembership(retainedFolders, memberships, {
+        ...settings,
+        folders: { ...settings.folders, chatNameDisplayOverrides },
+      });
       this.emitChanged({ type: "deleted", folderId });
       this.logger?.debug("Folder deleted; direct conversations unfiled and subfolders preserved.", {
         folderId,
@@ -404,6 +415,7 @@ export class FoldersRepository {
   private async saveFoldersAndMembership(
     folders: FolderRecord[],
     memberships: FolderConversationMembership[],
+    settings?: ReturnType<typeof normalizeSettings>,
   ): Promise<void> {
     const normalizedFolders = normalizeFolders(folders);
     await this.storage.setMany({
@@ -412,6 +424,7 @@ export class FoldersRepository {
         memberships,
         new Set(normalizedFolders.map((folder) => folder.id)),
       ),
+      ...(settings ? { [STORAGE_KEYS.settings]: settings } : {}),
     });
   }
 

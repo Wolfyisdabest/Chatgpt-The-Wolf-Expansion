@@ -6,11 +6,17 @@
 
 ChatGPT: The Wolf Expansion is a free, open-source Firefox and Floorp extension that adds missing power-user features to ChatGPT while preserving ChatGPT's normal interface.
 
-> **Development status:** `v0.1-dev.8.2` — Live Title Sync & Title Integrity. This is an early development build intended for manual testing. ChatGPT's DOM changes frequently, so integrations may need ongoing adapter updates.
+> **Development status:** `v0.1-dev.9` — Settings & Organization UX Overhaul. This is an early development build intended for manual testing. ChatGPT's DOM changes frequently, so integrations may need ongoing adapter updates.
 
 This project is unofficial and is not affiliated with, endorsed by, or sponsored by OpenAI.
 
-## Implemented in v0.1-dev.8.2
+## Implemented in v0.1-dev.9
+
+- A cleaner file-explorer-style Quick Access hierarchy: root chats no longer reserve fake folder controls, while actual folder children receive restrained theme-aware relationship connectors.
+- Redesigned, consistently grouped in-ChatGPT and Firefox/Floorp settings interfaces backed by the same versioned `SettingsService` record.
+- Global Compact/Full chat-name display remains the default, with stable folder-ID overrides that inherit from the nearest configured ancestor.
+- Folder menus provide direct per-folder chat-name display choices, while both settings interfaces include a lazy folder-override manager.
+- Folder action menus close on an explicit outside click. Folder create/rename drafts now commit only with Enter and cancel on Escape or an explicit outside pointer click; focus changes and sidebar reconciliation do not save or cancel drafts.
 
 - An unlimited extension-owned **Quick Access** system, internally backed by the proven Favorites repository and stable ChatGPT conversation IDs.
 - One native-looking sidebar section containing nested folders, filed conversations, and loose Quick Access conversations. Folders are locations inside Quick Access, not a separate user-facing system.
@@ -26,7 +32,7 @@ This project is unofficial and is not affiliated with, endorsed by, or sponsored
 - A hard folders-above-chats ordering rule at the root and inside every folder, with separate manual ordering regions.
 - Native drag/drop for ChatGPT Recent-chat rows into folders, Quick Access chats into folders, folder chats between folders, folder nesting, root movement, and sibling/chat reordering.
 - Keyboard-accessible folder controls for New subfolder, Rename, Move into, Move to parent/root, Move up/down, and safe Delete.
-- Stabilized shared create/rename editing with runtime draft state, Enter/Escape handling, deterministic blur behavior, reconciliation-safe editor reuse, and narrowly scoped event/focus protection from ChatGPT's composer.
+- Stabilized shared create/rename editing with runtime draft state, explicit Enter/Escape/outside-click behavior, reconciliation-safe editor reuse, and narrowly scoped event/focus protection from ChatGPT's composer.
 - Sidebar typography and editor density inherit ChatGPT's surrounding font metrics; nested depth changes indentation, never text size.
 - Compact and Full item-name modes shared by both settings frontends. Compact names stay single-line and reveal genuine overflow on hover; Full names wrap safely.
 - Outline/filled star actions for adding/removing the exact sidebar conversation from Quick Access without affecting ChatGPT's native Pin.
@@ -93,11 +99,11 @@ Open settings directly from the **Wolf Expansion** settings entry in ChatGPT's s
 2. Add a native conversation with its star, then drag another unstarred native conversation directly into a folder. Confirm both enter Quick Access and render once.
 3. Move a foldered chat to Quick Access root, then unstar a foldered chat. Confirm the first keeps Quick Access membership while the second disappears from Wolf UI and leaves the native ChatGPT chat untouched.
 4. Confirm root folders and loose chats align at one level beneath the quieter Quick Access header, nested content advances one indent per level, and expanded chevrons point down rather than left.
-5. Switch between Compact and Full item-name modes using both settings frontends. Verify Compact names fade without literal dots and reveal on hover, while Full names remain bounded to two lines.
+5. Switch the global Compact/Full default in both settings frontends, then set a parent folder to Full and a child to Inherit/Compact. Verify root chats use the global default and nested inheritance updates immediately.
 6. Enable reduced motion and verify title scrolling and expand/drag transitions stop without changing functionality.
 7. Drag over folders and insertion boundaries; confirm only the current folder highlight or insertion line appears and no blank gaps remain afterward.
 8. Disable Folders and confirm all starred chats appear flat at the root; re-enable it and confirm stored locations return. Disable Quick Access and confirm the entire Wolf organization UI hides without data loss.
-9. Recheck folder creation/rename protection, folders-before-chats ordering, cycle prevention, both conversation-menu contexts, native Pin independence, and persistence after reload.
+9. Open a folder menu and click outside to close it. Start create/rename, type a draft, and click outside; confirm it cancels while Enter commits, Escape cancels, and ordinary sidebar reconciliation preserves the editor.
 10. Rename both a root Quick Access chat and a foldered chat in ChatGPT without reloading. Confirm the title updates in place, membership/order remain unchanged, and Compact/Full overflow presentation follows the new title.
 11. Rename a conversation to `Pinned: Test Chat` and confirm Wolf Expansion preserves that title literally in the row, tooltip, and accessible label.
 
@@ -145,7 +151,7 @@ Current storage keys are:
 - Menu integration requires either an exact sidebar-row opener identity or an overflow-style current-conversation opener on a real `/c/<id>` page. Other ChatGPT menus remain untouched.
 - A conversation deleted on ChatGPT remains in local Quick Access/folder metadata because absence from the visible sidebar is not proof of deletion. Opening it may lead to ChatGPT's missing-conversation page; it can still be removed locally.
 - Conversation titles update only from links ChatGPT currently exposes in the native sidebar. Conflicting duplicate snapshots for one conversation ID are ignored until ChatGPT exposes a stable title.
-- The dev.8.2 same-session title refresh, settings gear, fade clipping, reclaimed title width, bounded Full mode, and existing drag/drop integrations require signed-in Firefox/Floorp live verification.
+- The dev.9 tree readability, settings redesign, per-folder display inheritance, and outside-click interactions require signed-in Firefox/Floorp live verification.
 - This milestone assigns each conversation to at most one folder. Folder references do not hide or move ChatGPT's native Recent-chat row.
 
 ## License

@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+import path from "node:path";
 import test from "node:test";
 import { DEFAULT_SETTINGS } from "../src/settings/defaults";
 import { SettingsService } from "../src/settings/settings";
@@ -74,6 +76,46 @@ test("migrates and updates the shared Quick Access item-name display mode", asyn
   assert.equal(updated.favorites.enabled, true);
 });
 
+test("migration preserves the global display mode and creates no folder overrides", () => {
+  const migrated = normalizeSettings({
+    schemaVersion: 5,
+    favorites: { itemNameDisplay: "full" },
+    folders: { enabled: true },
+  });
+  assert.equal(migrated.favorites.itemNameDisplay, "full");
+  assert.deepEqual(migrated.folders.chatNameDisplayOverrides, {});
+});
+
+test("folder display overrides persist and synchronize through the shared service", async () => {
+  const storage = new MemoryStorage();
+  const inChatSettings = new SettingsService(storage);
+  const browserPreferences = new SettingsService(storage);
+
+  await inChatSettings.setFolderChatNameDisplay("folder-a", "full");
+  assert.deepEqual(
+    (await browserPreferences.get()).folders.chatNameDisplayOverrides,
+    { "folder-a": "full" },
+  );
+  await browserPreferences.setFolderChatNameDisplay("folder-a", null);
+  assert.deepEqual(
+    (await inChatSettings.get()).folders.chatNameDisplayOverrides,
+    {},
+  );
+});
+
+test("invalid persisted folder override values are discarded", () => {
+  const normalized = normalizeSettings({
+    folders: {
+      chatNameDisplayOverrides: {
+        valid: "compact",
+        invalid: "giant",
+        "": "full",
+      },
+    },
+  });
+  assert.deepEqual(normalized.folders.chatNameDisplayOverrides, { valid: "compact" });
+});
+
 test("shares one authoritative settings record between service instances", async () => {
   const storage = new MemoryStorage();
   const inChatSettings = new SettingsService(storage);
@@ -86,4 +128,19 @@ test("shares one authoritative settings record between service instances", async
   const synchronized = await inChatSettings.get();
   assert.equal(synchronized.favorites.enabled, false);
   assert.equal(synchronized.favorites.showIcon, false);
+});
+
+test("both settings frontends expose the shared global and folder override controls", () => {
+  const inChat = readFileSync(
+    path.join(process.cwd(), "src/features/settings/InChatSettingsFeature.ts"),
+    "utf8",
+  );
+  const preferences = readFileSync(
+    path.join(process.cwd(), "src/settings/options/options.html"),
+    "utf8",
+  );
+  assert.match(inChat, /Default chat-name display/);
+  assert.match(inChat, /Manage folder overrides/);
+  assert.match(preferences, /Default chat-name display/);
+  assert.match(preferences, /Manage folder overrides/);
 });

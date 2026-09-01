@@ -1,4 +1,5 @@
 import { DEFAULT_SETTINGS } from "../settings/defaults";
+import { pruneFolderChatNameDisplayOverrides } from "../settings/folderDisplayMode";
 import {
   STORAGE_KEYS,
   STORAGE_SCHEMA_VERSION,
@@ -24,16 +25,42 @@ function readBoolean(value: unknown, fallback: boolean): boolean {
   return typeof value === "boolean" ? value : fallback;
 }
 
+export function normalizeFolderChatNameDisplayOverrides(
+  value: unknown,
+): Record<string, "compact" | "full"> {
+  if (!isRecord(value)) {
+    return {};
+  }
+  const normalized: Record<string, "compact" | "full"> = {};
+  for (const [folderId, mode] of Object.entries(value)) {
+    const normalizedFolderId = folderId.trim();
+    if (normalizedFolderId && (mode === "compact" || mode === "full")) {
+      normalized[normalizedFolderId] = mode;
+    }
+  }
+  return normalized;
+}
+
 export async function migrateStorage(storage: KeyValueStorage): Promise<void> {
   const rawSchemaVersion = await storage.get<unknown>(STORAGE_KEYS.schemaVersion, undefined);
   const rawSettings = await storage.get<unknown>(STORAGE_KEYS.settings, undefined);
-  const settings = normalizeSettings(rawSettings);
+  let settings = normalizeSettings(rawSettings);
   const rawFavorites = await storage.get<unknown>(STORAGE_KEYS.favorites, []);
   const favorites = normalizeFavorites(rawFavorites);
   const rawUiState = await storage.get<unknown>(STORAGE_KEYS.uiState, DEFAULT_UI_STATE);
   const uiState = normalizeUiState(rawUiState);
   const rawFolders = await storage.get<unknown>(STORAGE_KEYS.folders, []);
   const folders = normalizeFolders(rawFolders);
+  settings = {
+    ...settings,
+    folders: {
+      ...settings.folders,
+      chatNameDisplayOverrides: pruneFolderChatNameDisplayOverrides(
+        settings.folders.chatNameDisplayOverrides,
+        new Set(folders.map((folder) => folder.id)),
+      ),
+    },
+  };
   const rawFolderMembership = await storage.get<unknown>(STORAGE_KEYS.folderMembership, []);
   const folderMembership = normalizeFolderMembership(
     rawFolderMembership,
@@ -118,6 +145,9 @@ export function normalizeSettings(value: unknown): WolfExpansionSettings {
         DEFAULT_SETTINGS.folders.rememberCollapsed,
       ),
       showIcons: readBoolean(folders.showIcons, DEFAULT_SETTINGS.folders.showIcons),
+      chatNameDisplayOverrides: normalizeFolderChatNameDisplayOverrides(
+        folders.chatNameDisplayOverrides,
+      ),
     },
   };
 }

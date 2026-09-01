@@ -211,6 +211,40 @@ test("root and nested projections structurally keep folders above chats", async 
   assert.deepEqual(projection.folders[0]?.chats.map((chat) => chat.conversationId), ["folder-chat"]);
 });
 
+test("projection applies global mode to root chats and inherited modes inside folders", async () => {
+  const { favorites, folders } = repositories();
+  const development = await folders.createFolder("Development");
+  const testing = await folders.createFolder("Testing", development.id);
+  const logs = await folders.createFolder("Logs", development.id);
+  await favorites.add(conversation("root-chat"));
+  await favorites.add(conversation("testing-chat"));
+  await favorites.add(conversation("logs-chat"));
+  await folders.assignConversation(testing.id, conversation("testing-chat"));
+  await folders.assignConversation(logs.id, conversation("logs-chat"));
+
+  const projection = buildQuickAccessProjection(
+    await favorites.list(),
+    await folders.listFolders(),
+    await folders.listMembership(),
+    {
+      quickAccessEnabled: true,
+      foldersEnabled: true,
+      globalItemNameDisplay: "compact",
+      folderChatNameDisplayOverrides: {
+        [development.id]: "full",
+        [logs.id]: "compact",
+      },
+    },
+  );
+
+  assert.equal(projection.looseChats[0]?.nameDisplayMode, "compact");
+  const developmentView = projection.folders[0];
+  assert.equal(developmentView?.folders.find((folder) => folder.folder.id === testing.id)
+    ?.chats[0]?.nameDisplayMode, "full");
+  assert.equal(developmentView?.folders.find((folder) => folder.folder.id === logs.id)
+    ?.chats[0]?.nameDisplayMode, "compact");
+});
+
 test("folder nesting, cross-parent movement, root movement, and sibling reorder persist", async () => {
   const { folders } = repositories();
   const first = await folders.createFolder("First");

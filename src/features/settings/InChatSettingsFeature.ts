@@ -5,7 +5,12 @@ import { debounce } from "../../shared/events";
 import { createWolfElement } from "../../shared/dom";
 import type { Feature, Unsubscribe } from "../../shared/types";
 import { SettingsService } from "../../settings/settings";
-import type { WolfExpansionSettings } from "../../storage/schemas";
+import type {
+  FolderRecord,
+  ItemNameDisplayMode,
+  WolfExpansionSettings,
+} from "../../storage/schemas";
+import { FoldersRepository } from "../folders/FoldersRepository";
 
 export class InChatSettingsFeature implements Feature {
   public readonly id = "in-chat-settings";
@@ -16,11 +21,13 @@ export class InChatSettingsFeature implements Feature {
   private overlay: HTMLElement | null = null;
   private opener: HTMLElement | null = null;
   private stopWatchingSidebar: Unsubscribe | null = null;
+  private stopWatchingFolders: Unsubscribe | null = null;
   private readonly scheduleReconcile: () => void;
 
   public constructor(
     private readonly adapter: ChatGPTAdapter,
     private readonly settingsService: SettingsService,
+    private readonly foldersRepository: FoldersRepository,
     private readonly sidebarRoot: WolfSidebarRoot,
     private readonly logger: Logger,
   ) {
@@ -39,6 +46,9 @@ export class InChatSettingsFeature implements Feature {
 
     this.enabled = true;
     this.stopWatchingSidebar = this.adapter.watchSidebar(this.scheduleReconcile);
+    this.stopWatchingFolders = this.foldersRepository.subscribe(() => {
+      void this.renderFolderOverrides();
+    });
     this.reconcile();
     this.logger.debug("In-ChatGPT settings enabled.");
   }
@@ -51,6 +61,8 @@ export class InChatSettingsFeature implements Feature {
     this.enabled = false;
     this.stopWatchingSidebar?.();
     this.stopWatchingSidebar = null;
+    this.stopWatchingFolders?.();
+    this.stopWatchingFolders = null;
     this.close();
     if (this.entry) {
       this.sidebarRoot.unmount("settings", this.entry);
@@ -147,11 +159,14 @@ export class InChatSettingsFeature implements Feature {
     const form = createWolfElement("form", "settings-form");
     form.className = "wolf-settings-form";
     form.append(
-      this.createSettingsGroup("General", [
-        this.createCheckbox("wolf-settings-enabled", "Enable Wolf Expansion"),
-        this.createCheckbox("wolf-settings-debug", "Debug logging"),
+      this.createSettingsGroup("General", "Core extension behavior.", [
+        this.createCheckbox(
+          "wolf-settings-enabled",
+          "Enable Wolf Expansion",
+          "Turn all Wolf Expansion features on or off without deleting data.",
+        ),
       ]),
-      this.createSettingsGroup("Quick Access", [
+      this.createSettingsGroup("Quick Access", "Fast access to organized conversations.", [
         this.createCheckbox(
           "wolf-settings-favorites-enabled",
           "Enable Quick Access",
@@ -162,17 +177,8 @@ export class InChatSettingsFeature implements Feature {
           "wolf-settings-remember-collapsed",
           "Remember Quick Access section collapsed state",
         ),
-        this.createSelect(
-          "wolf-settings-item-name-display",
-          "Item name display",
-          [
-            { value: "compact", label: "Compact" },
-            { value: "full", label: "Full" },
-          ],
-          "Compact reveals faded overflow on hover; Full shows up to two lines.",
-        ),
       ]),
-      this.createSettingsGroup("Folders", [
+      this.createSettingsGroup("Folders", "Control the Quick Access folder hierarchy.", [
         this.createCheckbox(
           "wolf-settings-folders-enabled",
           "Enable Folders",
@@ -183,6 +189,25 @@ export class InChatSettingsFeature implements Feature {
           "Remember folder collapse state",
         ),
         this.createCheckbox("wolf-settings-folders-show-icons", "Show folder icons"),
+      ]),
+      this.createSettingsGroup("Appearance", "Conversation-name presentation.", [
+        this.createSelect(
+          "wolf-settings-item-name-display",
+          "Default chat-name display",
+          [
+            { value: "compact", label: "Compact" },
+            { value: "full", label: "Full" },
+          ],
+          "Root chats and folders without an override use this default.",
+        ),
+        this.createFolderOverrideManager(),
+      ]),
+      this.createSettingsGroup("Advanced", "Local diagnostics for troubleshooting.", [
+        this.createCheckbox(
+          "wolf-settings-debug",
+          "Debug logging",
+          "Write local diagnostics to the ChatGPT tab console.",
+        ),
       ]),
     );
     form.addEventListener("change", () => {
@@ -212,12 +237,115 @@ export class InChatSettingsFeature implements Feature {
     this.opener = null;
   }
 
-  private createSettingsGroup(title: string, rows: HTMLElement[]): HTMLFieldSetElement {
+  private createSettingsGroup(
+    title: string,
+    description: string,
+    rows: HTMLElement[],
+  ): HTMLFieldSetElement {
     const fieldset = document.createElement("fieldset");
     const legend = document.createElement("legend");
     legend.textContent = title;
-    fieldset.append(legend, ...rows);
+    const details = document.createElement("p");
+    details.className = "wolf-settings-group-description";
+    details.textContent = description;
+    fieldset.append(legend, details, ...rows);
     return fieldset;
+  }
+
+  private createFolderOverrideManager(): HTMLElement {
+    const manager = createWolfElement("div", "folder-override-manager");
+    manager.className = "wolf-folder-override-manager";
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "wolf-folder-override-toggle";
+    button.textContent = "Manage folder overrides";
+    button.setAttribute("aria-expanded", "false");
+    const content = createWolfElement("div", "folder-override-content");
+    content.className = "wolf-folder-override-content";
+    content.hidden = true;
+    button.addEventListener("click", () => {
+      const open = content.hidden;
+      content.hidden = !open;
+      button.setAttribute("aria-expanded", String(open));
+      if (open) {
+        void this.renderFolderOverrides();
+      }
+    });
+    manager.append(button, content);
+    return manager;
+  }
+
+  private async renderFolderOverrides(): Promise<void> {
+    const content = this.overlay?.querySelector<HTMLElement>(
+      '[data-wolf-expansion="folder-override-content"]',
+    );
+    if (!content || content.hidden || !this.settings) {
+      return;
+    }
+    const folders = await this.foldersRepository.listFolders();
+    content.replaceChildren();
+    if (folders.length === 0) {
+      const empty = document.createElement("p");
+      empty.className = "wolf-folder-override-empty";
+      empty.textContent = "No folders yet.";
+      content.append(empty);
+      return;
+    }
+    if (Object.keys(this.settings.folders.chatNameDisplayOverrides).length === 0) {
+      const inherited = document.createElement("p");
+      inherited.className = "wolf-folder-override-empty";
+      inherited.textContent = "All folders currently inherit the default.";
+      content.append(inherited);
+    }
+    for (const { folder, depth } of flattenFolders(folders)) {
+      const row = document.createElement("label");
+      row.className = "wolf-folder-override-row";
+      row.style.setProperty("--wolf-folder-settings-depth", String(depth));
+      const name = document.createElement("span");
+      name.textContent = folder.name;
+      name.title = folder.name;
+      const select = this.createFolderOverrideSelect(folder);
+      row.append(name, select);
+      content.append(row);
+    }
+  }
+
+  private createFolderOverrideSelect(folder: FolderRecord): HTMLSelectElement {
+    const select = document.createElement("select");
+    select.setAttribute("aria-label", `Chat name display for ${folder.name}`);
+    for (const [value, label] of [
+      ["inherit", "Inherit"],
+      ["compact", "Compact"],
+      ["full", "Full"],
+    ] as const) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = label;
+      select.append(option);
+    }
+    select.value = this.settings?.folders.chatNameDisplayOverrides[folder.id] ?? "inherit";
+    select.addEventListener("change", (event) => {
+      event.stopPropagation();
+      const mode: ItemNameDisplayMode | null = select.value === "compact" || select.value === "full"
+        ? select.value
+        : null;
+      void this.saveFolderOverride(folder.id, mode);
+    });
+    return select;
+  }
+
+  private async saveFolderOverride(
+    folderId: string,
+    mode: ItemNameDisplayMode | null,
+  ): Promise<void> {
+    try {
+      this.settings = await this.settingsService.setFolderChatNameDisplay(folderId, mode);
+      await this.renderFolderOverrides();
+      this.setStatus("Folder display override saved.");
+    } catch (error) {
+      this.logger.error("Could not save folder display override.", error);
+      this.setStatus("Could not save folder display override.");
+    }
   }
 
   private createCheckbox(
@@ -295,6 +423,7 @@ export class InChatSettingsFeature implements Feature {
       this.settings.folders.rememberCollapsed,
     );
     this.setCheckbox("wolf-settings-folders-show-icons", this.settings.folders.showIcons);
+    void this.renderFolderOverrides();
   }
 
   private async saveForm(): Promise<void> {
@@ -318,20 +447,19 @@ export class InChatSettingsFeature implements Feature {
           showIcons: this.getCheckbox("wolf-settings-folders-show-icons"),
         },
       });
-      const status = this.overlay?.querySelector<HTMLElement>(
-        '[data-wolf-expansion="settings-status"]',
-      );
-      if (status) {
-        status.textContent = "Settings saved.";
-      }
+      this.setStatus("Settings saved.");
     } catch (error) {
       this.logger.error("Could not save in-ChatGPT settings.", error);
-      const status = this.overlay?.querySelector<HTMLElement>(
-        '[data-wolf-expansion="settings-status"]',
-      );
-      if (status) {
-        status.textContent = "Could not save settings.";
-      }
+      this.setStatus("Could not save settings.");
+    }
+  }
+
+  private setStatus(message: string): void {
+    const status = this.overlay?.querySelector<HTMLElement>(
+      '[data-wolf-expansion="settings-status"]',
+    );
+    if (status) {
+      status.textContent = message;
     }
   }
 
@@ -388,4 +516,32 @@ export class InChatSettingsFeature implements Feature {
       first.focus();
     }
   }
+}
+
+function flattenFolders(
+  folders: readonly FolderRecord[],
+): Array<{ folder: FolderRecord; depth: number }> {
+  const byParent = new Map<string | null, FolderRecord[]>();
+  for (const folder of folders) {
+    const siblings = byParent.get(folder.parentId) ?? [];
+    siblings.push(folder);
+    byParent.set(folder.parentId, siblings);
+  }
+  for (const siblings of byParent.values()) {
+    siblings.sort((left, right) => left.sortIndex - right.sortIndex || left.createdAt - right.createdAt);
+  }
+  const flattened: Array<{ folder: FolderRecord; depth: number }> = [];
+  const visited = new Set<string>();
+  const visit = (parentId: string | null, depth: number): void => {
+    for (const folder of byParent.get(parentId) ?? []) {
+      if (visited.has(folder.id)) {
+        continue;
+      }
+      visited.add(folder.id);
+      flattened.push({ folder, depth });
+      visit(folder.id, depth + 1);
+    }
+  };
+  visit(null, 0);
+  return flattened;
 }
