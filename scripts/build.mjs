@@ -10,7 +10,11 @@ const watchMode = process.argv.includes("--watch");
 const staticFiles = [
   ["src/manifest.json", "manifest.json"],
   ["src/settings/options/options.html", "options.html"],
-  ["src/assets/icon.svg", "icons/icon.svg"],
+  ["assets/branding/icons/wolf-expansion-mark-16.png", "icons/wolf-expansion-mark-16.png"],
+  ["assets/branding/icons/wolf-expansion-mark-32.png", "icons/wolf-expansion-mark-32.png"],
+  ["assets/branding/icons/wolf-expansion-mark-48.png", "icons/wolf-expansion-mark-48.png"],
+  ["assets/branding/icons/wolf-expansion-mark-96.png", "icons/wolf-expansion-mark-96.png"],
+  ["assets/branding/icons/wolf-expansion-mark-128.png", "icons/wolf-expansion-mark-128.png"],
 ];
 
 async function copyStaticFiles() {

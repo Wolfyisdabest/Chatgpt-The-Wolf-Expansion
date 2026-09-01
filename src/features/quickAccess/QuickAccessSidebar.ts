@@ -24,6 +24,10 @@ import {
 } from "./folderNameEditorState";
 import { ExclusiveDragIndicator } from "./dragIndicatorState";
 import { getOverflowRevealMetrics } from "./itemNameDisplay";
+import {
+  getChevronPresentation,
+  getQuickAccessHierarchyLayout,
+} from "./hierarchyLayout";
 
 interface QuickAccessSidebarCallbacks {
   onSectionCollapseChange(collapsed: boolean): Promise<void>;
@@ -125,6 +129,9 @@ export class QuickAccessSidebar {
       return;
     }
     section.dataset.itemNameDisplay = settings.favorites.itemNameDisplay;
+    section.dataset.folderIcons = String(
+      settings.folders.enabled && settings.folders.showIcons,
+    );
     if (this.dragPayload) {
       this.logger.debug("Quick Access reconciliation cancelled the active drag safely.");
       this.endDrag();
@@ -141,8 +148,9 @@ export class QuickAccessSidebar {
     toggle.setAttribute("aria-expanded", String(!collapsed));
     toggle.setAttribute("aria-controls", "wolf-expansion-quick-access-tree");
     toggle.setAttribute("aria-label", `${collapsed ? "Expand" : "Collapse"} Quick Access`);
+    toggle.dataset.chevronDirection = getChevronPresentation(!collapsed).direction;
     toggle.append(
-      createIcon("chevron-right"),
+      createIcon(getChevronPresentation(!collapsed).icon),
       document.createTextNode("Quick Access"),
     );
     toggle.addEventListener("click", () => {
@@ -320,11 +328,13 @@ export class QuickAccessSidebar {
     folderRegion.dataset.parentId = parentId ?? "";
     folders.forEach((folder, index) => {
       folderRegion.append(
-        this.createInsertionTarget("folder-insert", parentId, index),
+        this.createInsertionTarget("folder-insert", parentId, index, depth),
         this.createFolder(folder, depth, index, folders.length),
       );
     });
-    folderRegion.append(this.createInsertionTarget("folder-insert", parentId, folders.length));
+    folderRegion.append(
+      this.createInsertionTarget("folder-insert", parentId, folders.length, depth),
+    );
     parent.append(folderRegion);
 
     const chatRegion = createWolfElement("div", "chat-region");
@@ -332,11 +342,13 @@ export class QuickAccessSidebar {
     chatRegion.dataset.parentId = parentId ?? "";
     chats.forEach((chat, index) => {
       chatRegion.append(
-        this.createInsertionTarget("chat-insert", parentId, index),
+        this.createInsertionTarget("chat-insert", parentId, index, depth),
         this.createChat(chat, depth, index, chats.length),
       );
     });
-    chatRegion.append(this.createInsertionTarget("chat-insert", parentId, chats.length));
+    chatRegion.append(
+      this.createInsertionTarget("chat-insert", parentId, chats.length, depth),
+    );
     parent.append(chatRegion);
   }
 
@@ -354,15 +366,21 @@ export class QuickAccessSidebar {
     item.draggable = isFolderDraggable(this.nameEditor.activeState, node.folder.id);
     item.setAttribute("role", "treeitem");
     item.setAttribute("aria-expanded", String(!node.folder.collapsed));
-    item.style.setProperty("--wolf-depth", String(depth));
+    const hierarchyLayout = getQuickAccessHierarchyLayout(depth, "folder");
+    item.dataset.logicalDepth = String(hierarchyLayout.logicalDepth);
+    item.dataset.visualDepth = String(hierarchyLayout.visualDepth);
+    item.style.setProperty("--wolf-depth", String(hierarchyLayout.visualDepth));
+    item.style.setProperty("--wolf-depth-offset", String(hierarchyLayout.logicalDepth));
 
     const row = document.createElement("div");
     row.className = "wolf-quick-access-folder-row";
+    const chevron = getChevronPresentation(!node.folder.collapsed);
     const toggle = this.createIconButton(
-      node.folder.collapsed ? "chevron-right" : "chevron-down",
+      chevron.icon,
       `${node.folder.collapsed ? "Expand" : "Collapse"} ${node.folder.name}`,
     );
     toggle.classList.add("wolf-folder-toggle");
+    toggle.dataset.chevronDirection = chevron.direction;
     toggle.setAttribute("aria-expanded", String(!node.folder.collapsed));
     toggle.addEventListener("click", () => void this.runSafely(() =>
       this.callbacks.onFolderCollapseChange(node.folder.id, !node.folder.collapsed)));
@@ -428,7 +446,11 @@ export class QuickAccessSidebar {
     item.dataset.sourceFolderId = chat.folderId ?? "";
     item.dataset.isQuickAccess = String(chat.isQuickAccess);
     item.draggable = true;
-    item.style.setProperty("--wolf-depth", String(depth));
+    const hierarchyLayout = getQuickAccessHierarchyLayout(depth, "chat");
+    item.dataset.logicalDepth = String(hierarchyLayout.logicalDepth);
+    item.dataset.visualDepth = String(hierarchyLayout.visualDepth);
+    item.style.setProperty("--wolf-depth", String(hierarchyLayout.visualDepth));
+    item.style.setProperty("--wolf-depth-offset", String(hierarchyLayout.logicalDepth));
 
     const link = createWolfElement("a", "quick-access-chat-link");
     link.className = "wolf-quick-access-chat-link";
@@ -436,6 +458,9 @@ export class QuickAccessSidebar {
     link.append(this.createItemNameViewport(chat.title));
     link.title = chat.title;
     link.setAttribute("aria-label", chat.title);
+    const hierarchySpacer = document.createElement("span");
+    hierarchySpacer.className = "wolf-chat-hierarchy-spacer";
+    hierarchySpacer.setAttribute("aria-hidden", "true");
     const controls = document.createElement("span");
     controls.className = "wolf-quick-access-controls";
     if (chat.folderId) {
@@ -471,7 +496,7 @@ export class QuickAccessSidebar {
         this.callbacks.onRemoveQuickAccess(chat.conversationId)));
       controls.append(remove);
     }
-    item.append(link, controls);
+    item.append(hierarchySpacer, link, controls);
     return item;
   }
 
@@ -479,12 +504,18 @@ export class QuickAccessSidebar {
     kind: "folder-insert" | "chat-insert",
     parentId: string | null,
     index: number,
+    depth: number,
   ): HTMLElement {
     const target = createWolfElement("div", "drop-insertion-target");
     target.className = "wolf-drop-insertion-target";
     target.dataset.wolfDropKind = kind;
     target.dataset.parentId = parentId ?? "";
     target.dataset.targetIndex = String(index);
+    const hierarchyLayout = getQuickAccessHierarchyLayout(
+      depth,
+      kind === "folder-insert" ? "folder" : "chat",
+    );
+    target.style.setProperty("--wolf-depth-offset", String(hierarchyLayout.logicalDepth));
     target.setAttribute("aria-label", kind === "folder-insert"
       ? "Folder insertion position"
       : "Conversation insertion position");

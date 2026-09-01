@@ -1,11 +1,14 @@
 {
   "manifest_version": 3,
   "name": "ChatGPT: The Wolf Expansion",
-  "version": "0.1.7.2",
+  "version": "0.1.8",
   "description": "Local-first Quick Access and folder organization for ChatGPT.",
   "icons": {
-    "48": "icons/icon.svg",
-    "96": "icons/icon.svg"
+    "16": "icons/wolf-expansion-mark-16.png",
+    "32": "icons/wolf-expansion-mark-32.png",
+    "48": "icons/wolf-expansion-mark-48.png",
+    "96": "icons/wolf-expansion-mark-96.png",
+    "128": "icons/wolf-expansion-mark-128.png"
   },
   "permissions": ["storage"],
   "host_permissions": ["https://chatgpt.com/*"],
@@ -15,6 +18,12 @@
       "js": ["content.js"],
       "css": ["content.css"],
       "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["icons/wolf-expansion-mark-32.png"],
+      "matches": ["https://chatgpt.com/*"]
     }
   ],
   "options_ui": {

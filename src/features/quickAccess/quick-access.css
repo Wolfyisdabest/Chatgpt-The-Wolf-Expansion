@@ -6,6 +6,9 @@
 }
 
 [data-wolf-expansion="quick-access-section"] {
+  --wolf-max-indent: 5.25rem;
+  --wolf-nesting-indent: 0.75rem;
+  --wolf-root-indent: 0.65rem;
   box-sizing: border-box;
   color: inherit;
   font: inherit;
@@ -39,7 +42,12 @@
 
 .wolf-quick-access-header {
   gap: 0.125rem;
-  min-height: 2rem;
+  min-height: 1.8rem;
+}
+
+.wolf-quick-access-header > .wolf-icon-button {
+  height: 1.6rem;
+  opacity: 0.58;
 }
 
 .wolf-quick-access-toggle {
@@ -51,10 +59,14 @@
   cursor: pointer;
   display: flex;
   flex: 1;
-  font: inherit;
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: inherit;
   gap: 0.3rem;
-  min-height: 2rem;
+  min-height: 1.8rem;
   min-width: 0;
+  opacity: 0.66;
   padding: 0.25rem 0.5rem;
   text-align: left;
 }
@@ -95,7 +107,10 @@
   border-radius: 0.5rem;
   line-height: inherit;
   min-height: 2rem;
-  padding-inline-start: calc(min(calc(var(--wolf-depth, 0) * 0.75rem), 5.25rem) + 0.15rem);
+  padding-inline-start: min(
+    calc(var(--wolf-root-indent) + var(--wolf-depth-offset, 0) * var(--wolf-nesting-indent)),
+    var(--wolf-max-indent)
+  );
 }
 
 .wolf-folder-toggle {
@@ -123,7 +138,10 @@
   border-radius: 0.5rem;
   line-height: inherit;
   min-height: 2rem;
-  padding-inline-start: calc(min(calc(var(--wolf-depth, 0) * 0.75rem), 5.25rem) + 1.5rem);
+  padding-inline-start: min(
+    calc(var(--wolf-root-indent) + var(--wolf-depth-offset, 0) * var(--wolf-nesting-indent)),
+    var(--wolf-max-indent)
+  );
 }
 
 .wolf-quick-access-chat-link {
@@ -134,10 +152,23 @@
   line-height: inherit;
   min-width: 0;
   overflow: hidden;
-  padding: 0.3rem 0.4rem;
+  padding-block: 0.3rem;
+  padding-inline-end: 0.4rem;
+  padding-inline-start: 0;
   text-decoration: none;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.wolf-chat-hierarchy-spacer {
+  flex: 0 0 1.35rem;
+  width: 1.35rem;
+}
+
+[data-wolf-expansion="quick-access-section"][data-folder-icons="true"]
+  .wolf-chat-hierarchy-spacer {
+  flex-basis: calc(1.35rem + 16px + 0.35rem);
+  width: calc(1.35rem + 16px + 0.35rem);
 }
 
 .wolf-quick-access-controls {
@@ -306,7 +337,20 @@
 .wolf-quick-access-editor {
   flex-wrap: wrap;
   gap: 0.3rem;
-  margin: 0.15rem 0.35rem 0.4rem 1.35rem;
+  margin-block: 0.15rem 0.4rem;
+  margin-inline-end: 0.35rem;
+  margin-inline-start: var(--wolf-root-indent);
+}
+
+.wolf-quick-access-folder > .wolf-quick-access-editor {
+  margin-inline-start: min(
+    calc(
+      var(--wolf-root-indent) +
+      var(--wolf-depth-offset, 0) * var(--wolf-nesting-indent) +
+      1.35rem
+    ),
+    calc(var(--wolf-max-indent) + 1.35rem)
+  );
 }
 
 .wolf-quick-access-editor > span {
@@ -378,7 +422,12 @@
 .wolf-drop-insertion-target {
   box-sizing: border-box;
   height: 0;
-  margin: 0 0.35rem;
+  margin-block: 0;
+  margin-inline-end: 0.35rem;
+  margin-inline-start: min(
+    calc(var(--wolf-root-indent) + var(--wolf-depth-offset, 0) * var(--wolf-nesting-indent)),
+    var(--wolf-max-indent)
+  );
   pointer-events: none;
   position: relative;
   z-index: 2;
@@ -505,6 +554,16 @@
 .wolf-debug-quick-access-current:focus-visible {
   background: color-mix(in srgb, currentColor 10%, transparent);
   outline: none;
+}
+
+.wolf-quick-access-header > .wolf-icon-button:hover:not(:disabled),
+.wolf-quick-access-header > .wolf-icon-button:focus-visible {
+  opacity: 1;
+}
+
+.wolf-quick-access-toggle:hover,
+.wolf-quick-access-toggle:focus-visible {
+  opacity: 1;
 }
 
 .wolf-quick-access-toggle:focus-visible,

@@ -23,6 +23,17 @@ header {
   margin-bottom: 2rem;
 }
 
+.brand-lockup {
+  align-items: center;
+  display: flex;
+  gap: 0.85rem;
+}
+
+.brand-lockup img {
+  display: block;
+  flex: 0 0 auto;
+}
+
 .eyebrow {
   font-size: 0.8rem;
   font-weight: 700;

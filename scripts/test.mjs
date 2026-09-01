@@ -12,6 +12,7 @@ const tests = [
   "tests/favorites.test.ts",
   "tests/folders.test.ts",
   "tests/folderNameEditorState.test.ts",
+  "tests/hierarchyLayout.test.ts",
   "tests/itemNameDisplay.test.ts",
   "tests/menuContext.test.ts",
   "tests/quickAccess.test.ts",

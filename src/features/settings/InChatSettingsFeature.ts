@@ -120,6 +120,15 @@ export class InChatSettingsFeature implements Feature {
 
     const header = document.createElement("header");
     header.className = "wolf-settings-dialog-header";
+    const identity = document.createElement("div");
+    identity.className = "wolf-settings-dialog-identity";
+    const mark = document.createElement("img");
+    mark.className = "wolf-settings-brand-mark";
+    mark.src = browser.runtime.getURL("icons/wolf-expansion-mark-32.png");
+    mark.alt = "";
+    mark.width = 28;
+    mark.height = 28;
+    mark.setAttribute("aria-hidden", "true");
     const title = document.createElement("h2");
     title.id = "wolf-settings-title";
     title.textContent = "Wolf Expansion Settings";
@@ -129,7 +138,8 @@ export class InChatSettingsFeature implements Feature {
     closeButton.textContent = "×";
     closeButton.setAttribute("aria-label", "Close Wolf Expansion settings");
     closeButton.addEventListener("click", () => this.close());
-    header.append(title, closeButton);
+    identity.append(mark, title);
+    header.append(identity, closeButton);
 
     const form = createWolfElement("form", "settings-form");
     form.className = "wolf-settings-form";
