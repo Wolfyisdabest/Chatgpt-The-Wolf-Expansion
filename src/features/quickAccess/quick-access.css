@@ -1,0 +1,544 @@
+[data-wolf-expansion="sidebar-root"] {
+  box-sizing: border-box;
+  color: inherit;
+  font: inherit;
+  min-width: 0;
+}
+
+[data-wolf-expansion="quick-access-section"] {
+  box-sizing: border-box;
+  color: inherit;
+  font: inherit;
+  margin: 0.125rem 0.5rem;
+  min-width: 0;
+}
+
+[data-wolf-expansion="quick-access-section"] :where(button, input, select, a, p),
+.wolf-quick-access-menu-action,
+.wolf-quick-access-menu-choice,
+.wolf-quick-access-menu-empty {
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.wolf-icon {
+  display: inline-block;
+  flex: 0 0 auto;
+  vertical-align: middle;
+}
+
+.wolf-quick-access-header,
+.wolf-quick-access-folder-row,
+.wolf-quick-access-chat,
+.wolf-quick-access-editor {
+  align-items: center;
+  display: flex;
+  min-width: 0;
+}
+
+.wolf-quick-access-header {
+  gap: 0.125rem;
+  min-height: 2rem;
+}
+
+.wolf-quick-access-toggle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 0.5rem;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  flex: 1;
+  font: inherit;
+  gap: 0.3rem;
+  min-height: 2rem;
+  min-width: 0;
+  padding: 0.25rem 0.5rem;
+  text-align: left;
+}
+
+.wolf-icon-button,
+.wolf-quick-access-star-button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 0.35rem;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  flex: 0 0 auto;
+  height: 1.75rem;
+  justify-content: center;
+  padding: 0;
+  width: 1.65rem;
+}
+
+.wolf-quick-access-toggle,
+.wolf-icon-button,
+.wolf-quick-access-star-button,
+.wolf-quick-access-chat-link,
+.wolf-quick-access-editor-button,
+.wolf-quick-access-menu-action,
+.wolf-quick-access-menu-choice,
+.wolf-debug-quick-access-current {
+  transition: background-color 120ms ease;
+}
+
+.wolf-icon-button:disabled {
+  cursor: default;
+  opacity: 0.22;
+}
+
+.wolf-quick-access-folder-row {
+  border-radius: 0.5rem;
+  line-height: inherit;
+  min-height: 2rem;
+  padding-inline-start: calc(min(calc(var(--wolf-depth, 0) * 0.75rem), 5.25rem) + 0.15rem);
+}
+
+.wolf-folder-toggle {
+  flex: 0 0 auto;
+  width: 1.35rem;
+}
+
+.wolf-folder-name {
+  align-items: center;
+  display: flex;
+  flex: 1;
+  font: inherit;
+  gap: 0.35rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wolf-folder-name > .wolf-icon {
+  flex: 0 0 auto;
+}
+
+.wolf-quick-access-chat {
+  border-radius: 0.5rem;
+  line-height: inherit;
+  min-height: 2rem;
+  padding-inline-start: calc(min(calc(var(--wolf-depth, 0) * 0.75rem), 5.25rem) + 1.5rem);
+}
+
+.wolf-quick-access-chat-link {
+  border-radius: 0.5rem;
+  color: inherit;
+  flex: 1;
+  font: inherit;
+  line-height: inherit;
+  min-width: 0;
+  overflow: hidden;
+  padding: 0.3rem 0.4rem;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wolf-quick-access-controls {
+  align-items: center;
+  display: flex;
+  flex: 0 0 auto;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+  visibility: hidden;
+}
+
+.wolf-quick-access-folder-row:hover .wolf-quick-access-controls,
+.wolf-quick-access-folder-row:focus-within .wolf-quick-access-controls,
+.wolf-quick-access-chat:hover .wolf-quick-access-controls,
+.wolf-quick-access-chat:focus-within .wolf-quick-access-controls {
+  opacity: 1;
+  pointer-events: auto;
+  visibility: visible;
+}
+
+.wolf-folder-region,
+.wolf-chat-region {
+  margin: 0;
+  min-width: 0;
+  padding: 0;
+}
+
+.wolf-quick-access-tree,
+.wolf-quick-access-children {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr);
+  min-width: 0;
+  opacity: 1;
+  transition:
+    grid-template-rows 160ms ease,
+    opacity 120ms ease;
+}
+
+.wolf-quick-access-tree.wolf-is-collapsed,
+.wolf-quick-access-children.wolf-is-collapsed {
+  grid-template-rows: minmax(0, 0fr);
+  opacity: 0;
+}
+
+.wolf-quick-access-tree-content,
+.wolf-quick-access-children-content {
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.wolf-quick-access-toggle > .wolf-icon:first-child,
+.wolf-folder-toggle > .wolf-icon {
+  transition: transform 140ms ease;
+}
+
+.wolf-quick-access-toggle[aria-expanded="true"] > .wolf-icon:first-child,
+.wolf-folder-toggle[aria-expanded="true"] > .wolf-icon {
+  transform: rotate(90deg);
+}
+
+.wolf-item-name-viewport {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.wolf-item-name-text {
+  display: block;
+  min-width: 0;
+  transform: translateX(0);
+}
+
+[data-wolf-expansion="quick-access-section"][data-item-name-display="compact"]
+  .wolf-item-name-viewport {
+  white-space: nowrap;
+}
+
+[data-wolf-expansion="quick-access-section"][data-item-name-display="compact"]
+  .wolf-item-name-text {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: transform 180ms ease-out;
+  white-space: nowrap;
+}
+
+[data-wolf-expansion="quick-access-section"][data-item-name-display="compact"]
+  .wolf-item-name-viewport[data-overflowing="true"]:hover
+  .wolf-item-name-text {
+  animation: wolf-item-name-reveal var(--wolf-name-scroll-duration, 3s) ease-in-out 450ms 1 forwards;
+  max-width: none;
+  overflow: visible;
+  text-overflow: clip;
+  width: max-content;
+}
+
+[data-wolf-expansion="quick-access-section"][data-item-name-display="full"]
+  :is(.wolf-quick-access-folder-row, .wolf-quick-access-chat) {
+  align-items: flex-start;
+}
+
+[data-wolf-expansion="quick-access-section"][data-item-name-display="full"]
+  :is(.wolf-folder-name, .wolf-quick-access-chat-link, .wolf-item-name-viewport, .wolf-item-name-text) {
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+[data-wolf-expansion="quick-access-section"][data-item-name-display="full"]
+  .wolf-item-name-text {
+  overflow-wrap: anywhere;
+}
+
+@keyframes wolf-item-name-reveal {
+  0%, 10% {
+    transform: translateX(0);
+  }
+
+  85%, 100% {
+    transform: translateX(calc(-1 * var(--wolf-name-scroll-distance, 0px)));
+  }
+}
+
+.wolf-row-actions {
+  align-items: center;
+  display: inline-flex;
+  flex: 0 0 auto;
+  margin-inline-end: 0.125rem;
+}
+
+.wolf-row-actions[data-insertion-strategy="row-owned-sibling"] {
+  margin-inline-start: auto;
+}
+
+.wolf-quick-access-star-button {
+  opacity: 0.72;
+  position: static;
+}
+
+.wolf-quick-access-star-button.wolf-is-quick-access {
+  opacity: 1;
+}
+
+.wolf-quick-access-empty {
+  font: inherit;
+  margin: 0;
+  opacity: 0.62;
+  padding: 0.5rem 0.5rem 0.5rem 1.5rem;
+}
+
+.wolf-debug-quick-access-current {
+  background: transparent;
+  border: 0;
+  border-radius: 0.4rem;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  margin: 0 0.5rem 0.25rem;
+  opacity: 0.72;
+  padding: 0.3rem 0.5rem;
+}
+
+.wolf-quick-access-editor {
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0.15rem 0.35rem 0.4rem 1.35rem;
+}
+
+.wolf-quick-access-editor > span {
+  flex-basis: 100%;
+  font: inherit;
+  opacity: 0.8;
+}
+
+.wolf-quick-access-input,
+.wolf-quick-access-select {
+  appearance: none;
+  background: transparent;
+  border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
+  border-radius: 0.4rem;
+  color: inherit;
+  flex: 1 1 8rem;
+  font: inherit;
+  line-height: inherit;
+  min-width: 5rem;
+  padding: 0.35rem 0.45rem;
+}
+
+.wolf-quick-access-editor-button {
+  background: transparent;
+  border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+  border-radius: 0.4rem;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  padding: 0.3rem 0.45rem;
+}
+
+.wolf-danger-action {
+  color: #c84343;
+}
+
+.wolf-root-drop-target {
+  align-items: center;
+  border: 1px dashed color-mix(in srgb, currentColor 30%, transparent);
+  border-width: 0;
+  border-radius: 0.45rem;
+  display: flex;
+  font: inherit;
+  gap: 0.4rem;
+  margin: 0 0.4rem;
+  max-height: 0;
+  opacity: 0;
+  overflow: hidden;
+  padding: 0 0.45rem;
+  transform: translateY(-0.2rem);
+  transition:
+    max-height 140ms ease,
+    opacity 120ms ease,
+    padding 140ms ease,
+    transform 140ms ease;
+  visibility: hidden;
+}
+
+.wolf-is-dragging-folder .wolf-root-drop-target {
+  border-width: 1px;
+  margin-block: 0.2rem;
+  max-height: 3rem;
+  opacity: 0.75;
+  padding: 0.4rem 0.45rem;
+  transform: translateY(0);
+  visibility: visible;
+}
+
+.wolf-drop-insertion-target {
+  box-sizing: border-box;
+  height: 0;
+  margin: 0 0.35rem;
+  pointer-events: none;
+  position: relative;
+  z-index: 2;
+}
+
+.wolf-is-dragging .wolf-drop-insertion-target {
+  pointer-events: auto;
+}
+
+.wolf-is-dragging .wolf-drop-insertion-target::before {
+  content: "";
+  height: 0.7rem;
+  inset-inline: 0;
+  position: absolute;
+  top: -0.35rem;
+}
+
+.wolf-drop-insertion-target.wolf-is-valid-drop {
+  border-top: 0;
+}
+
+.wolf-drop-insertion-target.wolf-is-valid-drop::after {
+  border-top: 2px solid currentColor;
+  content: "";
+  inset-inline: 0;
+  position: absolute;
+  top: -1px;
+}
+
+.wolf-is-valid-drop:not(.wolf-drop-insertion-target) {
+  box-shadow: inset 0 0 0 2px currentColor;
+  transition: box-shadow 100ms ease;
+}
+
+.wolf-is-invalid-drop {
+  cursor: not-allowed;
+  outline: 1px dashed currentColor;
+  opacity: 0.55;
+}
+
+[data-drop-status]::after {
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  content: attr(data-drop-status);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+.wolf-is-drag-source {
+  opacity: 0.45;
+}
+
+.wolf-quick-access-menu-actions {
+  border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+  margin-top: 0.125rem;
+  padding-top: 0.125rem;
+}
+
+.wolf-quick-access-menu-action,
+.wolf-quick-access-menu-choice {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 0.45rem;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  gap: 0.55rem;
+  margin: 0.125rem 0.25rem;
+  min-height: 2.25rem;
+  padding: 0.55rem 0.75rem;
+  text-align: left;
+  width: calc(100% - 0.5rem);
+}
+
+.wolf-quick-access-menu-choices {
+  max-height: 15rem;
+  overflow-y: auto;
+}
+
+.wolf-quick-access-menu-choice {
+  padding-inline-start: calc(0.75rem + var(--wolf-menu-depth, 0) * 0.85rem);
+}
+
+.wolf-quick-access-menu-empty {
+  display: block;
+  opacity: 0.65;
+  padding: 0.5rem 0.75rem;
+}
+
+.wolf-quick-access-menu-action > .wolf-icon:last-child:not(:first-child) {
+  margin-inline-start: auto;
+}
+
+.wolf-visually-hidden {
+  clip: rect(0 0 0 0);
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+.wolf-quick-access-toggle:hover,
+.wolf-quick-access-toggle:focus-visible,
+.wolf-icon-button:hover:not(:disabled),
+.wolf-icon-button:focus-visible,
+.wolf-quick-access-star-button:hover,
+.wolf-quick-access-star-button:focus-visible,
+.wolf-quick-access-chat-link:hover,
+.wolf-quick-access-chat-link:focus-visible,
+.wolf-quick-access-editor-button:hover,
+.wolf-quick-access-editor-button:focus-visible,
+.wolf-quick-access-menu-action:hover:not(:disabled),
+.wolf-quick-access-menu-action:focus-visible,
+.wolf-quick-access-menu-choice:hover:not(:disabled),
+.wolf-quick-access-menu-choice:focus-visible,
+.wolf-debug-quick-access-current:hover,
+.wolf-debug-quick-access-current:focus-visible {
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  outline: none;
+}
+
+.wolf-quick-access-toggle:focus-visible,
+.wolf-icon-button:focus-visible,
+.wolf-quick-access-star-button:focus-visible,
+.wolf-quick-access-chat-link:focus-visible,
+.wolf-quick-access-editor-button:focus-visible,
+.wolf-quick-access-menu-action:focus-visible,
+.wolf-quick-access-menu-choice:focus-visible,
+.wolf-quick-access-input:focus-visible,
+.wolf-quick-access-select:focus-visible,
+.wolf-debug-quick-access-current:focus-visible {
+  box-shadow: inset 0 0 0 2px currentColor;
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wolf-quick-access-controls,
+  .wolf-quick-access-tree,
+  .wolf-quick-access-children,
+  .wolf-quick-access-toggle > .wolf-icon:first-child,
+  .wolf-folder-toggle > .wolf-icon,
+  .wolf-item-name-text,
+  .wolf-root-drop-target,
+  .wolf-is-valid-drop,
+  .wolf-quick-access-toggle,
+  .wolf-icon-button,
+  .wolf-quick-access-star-button,
+  .wolf-quick-access-chat-link,
+  .wolf-quick-access-editor-button,
+  .wolf-quick-access-menu-action,
+  .wolf-quick-access-menu-choice,
+  .wolf-debug-quick-access-current {
+    animation: none !important;
+    transition: none;
+  }
+}

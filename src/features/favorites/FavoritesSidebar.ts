@@ -214,11 +214,15 @@ export class FavoritesSidebar {
       this.section.setAttribute("aria-label", "Wolf Expansion Favorites");
     }
 
+    const foldersSection = Array.from(target.parent.children).find(
+      (element) => element.getAttribute("data-wolf-expansion") === "folders-section",
+    ) ?? null;
+    const before = foldersSection ?? target.before;
     if (
       this.section.parentElement !== target.parent ||
-      (target.before !== this.section && this.section.nextElementSibling !== target.before)
+      (before !== this.section && this.section.nextElementSibling !== before)
     ) {
-      target.parent.insertBefore(this.section, target.before);
+      target.parent.insertBefore(this.section, before);
     }
 
     return this.section;

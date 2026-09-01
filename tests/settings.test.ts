@@ -10,7 +10,7 @@ test("uses the shared settings defaults for missing data", () => {
   assert.deepEqual(normalizeSettings(undefined), DEFAULT_SETTINGS);
 });
 
-test("migrates the v1 debugLogging field into the v2 debug structure", () => {
+test("migrates older settings and adds the current folders defaults", () => {
   const migrated = normalizeSettings({
     schemaVersion: 1,
     enabled: false,
@@ -26,6 +26,8 @@ test("migrates the v1 debugLogging field into the v2 debug structure", () => {
   assert.deepEqual(migrated.debug, { enabled: true });
   assert.equal(migrated.enabled, false);
   assert.equal(migrated.favorites.showIcon, false);
+  assert.equal(migrated.favorites.itemNameDisplay, "compact");
+  assert.deepEqual(migrated.folders, DEFAULT_SETTINGS.folders);
 });
 
 test("merges partial settings updates without resetting sibling values", async () => {
@@ -42,6 +44,33 @@ test("merges partial settings updates without resetting sibling values", async (
   const updated = await settingsService.update({ debug: { enabled: true } });
   assert.equal(updated.debug.enabled, true);
   assert.equal(updated.favorites.showIcon, false);
+  assert.equal(updated.favorites.enabled, true);
+  assert.deepEqual(updated.folders, DEFAULT_SETTINGS.folders);
+});
+
+test("merges partial folder settings without resetting sibling values", async () => {
+  const settingsService = new SettingsService(new MemoryStorage());
+  await settingsService.update({ folders: { showIcons: false } });
+  const updated = await settingsService.update({ folders: { enabled: false } });
+
+  assert.equal(updated.folders.enabled, false);
+  assert.equal(updated.folders.showIcons, false);
+  assert.equal(updated.folders.rememberCollapsed, true);
+});
+
+test("migrates and updates the shared Quick Access item-name display mode", async () => {
+  assert.equal(normalizeSettings({
+    favorites: { itemNameDisplay: "full" },
+  }).favorites.itemNameDisplay, "full");
+  assert.equal(normalizeSettings({
+    favorites: { itemNameDisplay: "unexpected" },
+  }).favorites.itemNameDisplay, "compact");
+
+  const settingsService = new SettingsService(new MemoryStorage());
+  const updated = await settingsService.update({
+    favorites: { itemNameDisplay: "full" },
+  });
+  assert.equal(updated.favorites.itemNameDisplay, "full");
   assert.equal(updated.favorites.enabled, true);
 });
 

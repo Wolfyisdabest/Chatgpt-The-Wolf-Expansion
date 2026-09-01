@@ -95,6 +95,20 @@ input[type="checkbox"]:focus-visible {
   outline-offset: 3px;
 }
 
+select {
+  background: Canvas;
+  border: 1px solid color-mix(in srgb, CanvasText 25%, transparent);
+  border-radius: 0.4rem;
+  color: CanvasText;
+  font: inherit;
+  padding: 0.45rem 0.6rem;
+}
+
+select:focus-visible {
+  outline: 2px solid Highlight;
+  outline-offset: 3px;
+}
+
 .status {
   min-height: 1.5rem;
   padding: 0 0.25rem;

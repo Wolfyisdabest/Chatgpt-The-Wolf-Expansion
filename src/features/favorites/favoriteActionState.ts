@@ -6,9 +6,9 @@ export function getFavoriteActionLabel(
 ): string {
   if (surface === "debug-current") {
     return isFavorite
-      ? "Debug: Unfavorite current chat"
-      : "Debug: Favorite current chat";
+      ? "Debug: Remove current chat from Quick Access"
+      : "Debug: Add current chat to Quick Access";
   }
 
-  return isFavorite ? "★ Remove from Favorites" : "⭐ Add to Favorites";
+  return isFavorite ? "Remove from Quick Access" : "Add to Quick Access";
 }

@@ -8,9 +8,16 @@ const outputDirectory = path.join(root, ".test-dist");
 const tests = [
   "tests/conversationIdentity.test.ts",
   "tests/conversationUrl.test.ts",
+  "tests/dragIndicatorState.test.ts",
   "tests/favorites.test.ts",
+  "tests/folders.test.ts",
+  "tests/folderNameEditorState.test.ts",
+  "tests/itemNameDisplay.test.ts",
   "tests/menuContext.test.ts",
+  "tests/quickAccess.test.ts",
+  "tests/quickAccessMembership.test.ts",
   "tests/settings.test.ts",
+  "tests/sidebarPlacement.test.ts",
 ];
 
 await rm(outputDirectory, { recursive: true, force: true });

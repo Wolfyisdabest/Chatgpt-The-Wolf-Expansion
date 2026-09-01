@@ -37,15 +37,15 @@ test("resolves a current conversation menu only from a conversation URL", () => 
   assert.equal(parseConversationId("https://chatgpt.com/search"), null);
 });
 
-test("projects Favorite state into menu and debug action labels", () => {
-  assert.equal(getFavoriteActionLabel(false, "menu"), "⭐ Add to Favorites");
-  assert.equal(getFavoriteActionLabel(true, "menu"), "★ Remove from Favorites");
+test("projects Quick Access state into menu and debug action labels", () => {
+  assert.equal(getFavoriteActionLabel(false, "menu"), "Add to Quick Access");
+  assert.equal(getFavoriteActionLabel(true, "menu"), "Remove from Quick Access");
   assert.equal(
     getFavoriteActionLabel(false, "debug-current"),
-    "Debug: Favorite current chat",
+    "Debug: Add current chat to Quick Access",
   );
   assert.equal(
     getFavoriteActionLabel(true, "debug-current"),
-    "Debug: Unfavorite current chat",
+    "Debug: Remove current chat from Quick Access",
   );
 });

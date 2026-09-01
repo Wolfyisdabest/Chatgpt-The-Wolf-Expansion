@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "ChatGPT: The Wolf Expansion",
-  "version": "0.1.0.5",
-  "description": "Local-first quality-of-life features for ChatGPT, beginning with unlimited Favorites.",
+  "version": "0.1.7.2",
+  "description": "Local-first Quick Access and folder organization for ChatGPT.",
   "icons": {
     "48": "icons/icon.svg",
     "96": "icons/icon.svg"

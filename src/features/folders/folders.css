@@ -1,0 +1,246 @@
+[data-wolf-expansion="folders-section"] {
+  box-sizing: border-box;
+  color: inherit;
+  font: inherit;
+  margin: 0.25rem 0.5rem;
+  min-width: 0;
+}
+
+.wolf-folders-header,
+.wolf-folder-row,
+.wolf-folder-editor {
+  align-items: center;
+  display: flex;
+  min-width: 0;
+}
+
+.wolf-folders-toggle,
+.wolf-folder-header-action,
+.wolf-folder-toggle,
+.wolf-folder-control,
+.wolf-folder-editor-button,
+.wolf-folder-menu-action,
+.wolf-folder-menu-choice,
+.wolf-folder-conversation-link {
+  color: inherit;
+  font: inherit;
+}
+
+.wolf-folders-toggle {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  display: flex;
+  flex: 1;
+  gap: 0.4rem;
+  min-height: 2rem;
+  min-width: 0;
+  padding: 0.35rem 0.5rem;
+  text-align: left;
+}
+
+.wolf-folders-chevron {
+  align-items: center;
+  display: inline-flex;
+  justify-content: center;
+  width: 1rem;
+}
+
+.wolf-folders-heading {
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.wolf-folder-header-action,
+.wolf-folder-toggle,
+.wolf-folder-control {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 0.35rem;
+  cursor: pointer;
+  display: inline-flex;
+  height: 1.75rem;
+  justify-content: center;
+  padding: 0;
+  width: 1.65rem;
+}
+
+.wolf-folder-header-action {
+  font-size: 1.2rem;
+  margin-inline-end: 0.25rem;
+}
+
+.wolf-folders-tree,
+.wolf-folder-children {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.wolf-folder-row {
+  border-radius: 0.5rem;
+  min-height: 2rem;
+  padding-inline-start: calc(var(--wolf-folder-depth, 0) * 0.85rem + 0.2rem);
+}
+
+.wolf-folder-name {
+  flex: 1;
+  font-size: 0.8125rem;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wolf-folder-controls {
+  align-items: center;
+  display: flex;
+  opacity: 0;
+}
+
+.wolf-folder-row:hover .wolf-folder-controls,
+.wolf-folder-row:focus-within .wolf-folder-controls {
+  opacity: 1;
+}
+
+.wolf-folder-control:disabled {
+  cursor: default;
+  opacity: 0.22;
+}
+
+.wolf-folder-conversation {
+  padding-inline-start: calc((var(--wolf-folder-depth, 0) + 1) * 0.85rem + 1.3rem);
+}
+
+.wolf-folder-conversation-link {
+  border-radius: 0.5rem;
+  display: block;
+  font-size: 0.8125rem;
+  overflow: hidden;
+  padding: 0.45rem 0.5rem;
+  text-decoration: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.wolf-folders-empty {
+  font-size: 0.8125rem;
+  opacity: 0.62;
+  padding: 0.45rem 0.5rem 0.45rem 1.4rem;
+}
+
+.wolf-folder-editor {
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  margin: 0.15rem 0.35rem 0.4rem 1.35rem;
+}
+
+.wolf-folder-editor > span {
+  flex-basis: 100%;
+  font-size: 0.75rem;
+  opacity: 0.8;
+}
+
+.wolf-folder-name-input,
+.wolf-folder-select {
+  background: color-mix(in srgb, currentColor 6%, transparent);
+  border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
+  border-radius: 0.4rem;
+  color: inherit;
+  flex: 1 1 8rem;
+  font: inherit;
+  min-width: 5rem;
+  padding: 0.35rem 0.45rem;
+}
+
+.wolf-folder-editor-button {
+  background: transparent;
+  border: 1px solid color-mix(in srgb, currentColor 20%, transparent);
+  border-radius: 0.4rem;
+  cursor: pointer;
+  padding: 0.3rem 0.45rem;
+}
+
+.wolf-folder-danger {
+  color: #d14b4b;
+}
+
+.wolf-folder-menu-actions {
+  border-top: 1px solid color-mix(in srgb, currentColor 12%, transparent);
+  margin-top: 0.125rem;
+  padding-top: 0.125rem;
+}
+
+.wolf-folder-menu-action,
+.wolf-folder-menu-choice {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  border-radius: 0.45rem;
+  cursor: pointer;
+  display: flex;
+  min-height: 2.25rem;
+  padding: 0.55rem 0.75rem;
+  text-align: left;
+  width: calc(100% - 0.5rem);
+  margin: 0.125rem 0.25rem;
+}
+
+.wolf-folder-menu-choices {
+  max-height: 15rem;
+  overflow-y: auto;
+}
+
+.wolf-folder-menu-choice {
+  font-size: 0.8125rem;
+  padding-inline-start: calc(0.75rem + var(--wolf-folder-menu-depth, 0) * 0.85rem);
+}
+
+.wolf-folder-menu-choice:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.wolf-folder-menu-empty {
+  display: block;
+  font-size: 0.75rem;
+  opacity: 0.65;
+  padding: 0.5rem 0.75rem;
+}
+
+.wolf-folders-toggle:hover,
+.wolf-folders-toggle:focus-visible,
+.wolf-folder-header-action:hover,
+.wolf-folder-header-action:focus-visible,
+.wolf-folder-toggle:hover,
+.wolf-folder-toggle:focus-visible,
+.wolf-folder-control:hover:not(:disabled),
+.wolf-folder-control:focus-visible,
+.wolf-folder-conversation-link:hover,
+.wolf-folder-conversation-link:focus-visible,
+.wolf-folder-editor-button:hover,
+.wolf-folder-editor-button:focus-visible,
+.wolf-folder-menu-action:hover:not(:disabled),
+.wolf-folder-menu-action:focus-visible,
+.wolf-folder-menu-choice:hover:not(:disabled),
+.wolf-folder-menu-choice:focus-visible {
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  outline: none;
+}
+
+.wolf-folders-toggle:focus-visible,
+.wolf-folder-header-action:focus-visible,
+.wolf-folder-toggle:focus-visible,
+.wolf-folder-control:focus-visible,
+.wolf-folder-conversation-link:focus-visible,
+.wolf-folder-editor-button:focus-visible,
+.wolf-folder-menu-action:focus-visible,
+.wolf-folder-menu-choice:focus-visible,
+.wolf-folder-name-input:focus-visible,
+.wolf-folder-select:focus-visible {
+  box-shadow: inset 0 0 0 2px currentColor;
+  outline: none;
+}

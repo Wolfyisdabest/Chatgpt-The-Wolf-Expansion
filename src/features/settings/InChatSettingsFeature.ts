@@ -1,7 +1,9 @@
 import type { ChatGPTAdapter } from "../../adapters/chatgpt/ChatGPTAdapter";
 import type { Logger } from "../../core/logger";
+import type { WolfSidebarRoot } from "../../core/WolfSidebarRoot";
 import { debounce } from "../../shared/events";
 import { createWolfElement } from "../../shared/dom";
+import { createIcon } from "../../shared/icons";
 import type { Feature, Unsubscribe } from "../../shared/types";
 import { SettingsService } from "../../settings/settings";
 import type { WolfExpansionSettings } from "../../storage/schemas";
@@ -20,6 +22,7 @@ export class InChatSettingsFeature implements Feature {
   public constructor(
     private readonly adapter: ChatGPTAdapter,
     private readonly settingsService: SettingsService,
+    private readonly sidebarRoot: WolfSidebarRoot,
     private readonly logger: Logger,
   ) {
     this.scheduleReconcile = debounce(() => this.reconcile(), 100);
@@ -50,7 +53,9 @@ export class InChatSettingsFeature implements Feature {
     this.stopWatchingSidebar?.();
     this.stopWatchingSidebar = null;
     this.close();
-    this.entry?.remove();
+    if (this.entry) {
+      this.sidebarRoot.unmount("settings", this.entry);
+    }
     this.entry = null;
     this.logger.debug("In-ChatGPT settings disabled.");
   }
@@ -64,11 +69,6 @@ export class InChatSettingsFeature implements Feature {
       return;
     }
 
-    const target = this.adapter.findSidebarInsertionTarget();
-    if (!target) {
-      return;
-    }
-
     if (!this.entry) {
       this.entry = createWolfElement("div", "settings-entry");
       this.entry.className = "wolf-settings-entry";
@@ -79,9 +79,9 @@ export class InChatSettingsFeature implements Feature {
       button.setAttribute("aria-label", "Open Wolf Expansion settings");
 
       const label = document.createElement("span");
-      label.textContent = "Wolf Expansion";
+      label.textContent = "Wolf Expansion settings";
       const icon = document.createElement("span");
-      icon.textContent = "⚙";
+      icon.append(createIcon("settings"));
       icon.setAttribute("aria-hidden", "true");
       button.append(label, icon);
       button.addEventListener("click", (event) => {
@@ -93,13 +93,7 @@ export class InChatSettingsFeature implements Feature {
       this.entry.append(button);
     }
 
-    const favoritesSection = Array.from(target.parent.children).find(
-      (element) => element.getAttribute("data-wolf-expansion") === "favorites-section",
-    ) ?? null;
-    const before = favoritesSection ?? target.before;
-    if (this.entry.parentElement !== target.parent || this.entry.nextElementSibling !== before) {
-      target.parent.insertBefore(this.entry, before);
-    }
+    this.sidebarRoot.mount("settings", this.entry);
   }
 
   private open(opener: HTMLElement): void {
@@ -144,13 +138,38 @@ export class InChatSettingsFeature implements Feature {
         this.createCheckbox("wolf-settings-enabled", "Enable Wolf Expansion"),
         this.createCheckbox("wolf-settings-debug", "Debug logging"),
       ]),
-      this.createSettingsGroup("Favorites", [
-        this.createCheckbox("wolf-settings-favorites-enabled", "Enable Favorites"),
-        this.createCheckbox("wolf-settings-show-icon", "Show Favorites icon"),
+      this.createSettingsGroup("Quick Access", [
+        this.createCheckbox(
+          "wolf-settings-favorites-enabled",
+          "Enable Quick Access",
+          "Show Wolf Expansion's chat organization system.",
+        ),
+        this.createCheckbox("wolf-settings-show-icon", "Show Quick Access star icons"),
         this.createCheckbox(
           "wolf-settings-remember-collapsed",
-          "Remember collapsed state",
+          "Remember Quick Access section collapsed state",
         ),
+        this.createSelect(
+          "wolf-settings-item-name-display",
+          "Item name display",
+          [
+            { value: "compact", label: "Compact" },
+            { value: "full", label: "Full" },
+          ],
+          "Compact reveals clipped names on hover; Full wraps names.",
+        ),
+      ]),
+      this.createSettingsGroup("Folders", [
+        this.createCheckbox(
+          "wolf-settings-folders-enabled",
+          "Enable Folders",
+          "Organize Quick Access chats into folders and subfolders.",
+        ),
+        this.createCheckbox(
+          "wolf-settings-folders-remember-collapsed",
+          "Remember folder collapse state",
+        ),
+        this.createCheckbox("wolf-settings-folders-show-icons", "Show folder icons"),
       ]),
     );
     form.addEventListener("change", () => {
@@ -188,15 +207,55 @@ export class InChatSettingsFeature implements Feature {
     return fieldset;
   }
 
-  private createCheckbox(id: string, labelText: string): HTMLLabelElement {
+  private createCheckbox(
+    id: string,
+    labelText: string,
+    description?: string,
+  ): HTMLLabelElement {
     const label = document.createElement("label");
     label.className = "wolf-settings-row";
     const text = document.createElement("span");
-    text.textContent = labelText;
+    const title = document.createElement("strong");
+    title.textContent = labelText;
+    text.append(title);
+    if (description) {
+      const details = document.createElement("small");
+      details.textContent = description;
+      text.append(details);
+    }
     const input = document.createElement("input");
     input.id = id;
     input.type = "checkbox";
     label.append(text, input);
+    return label;
+  }
+
+  private createSelect(
+    id: string,
+    labelText: string,
+    options: ReadonlyArray<{ value: string; label: string }>,
+    description?: string,
+  ): HTMLLabelElement {
+    const label = document.createElement("label");
+    label.className = "wolf-settings-row";
+    const text = document.createElement("span");
+    const title = document.createElement("strong");
+    title.textContent = labelText;
+    text.append(title);
+    if (description) {
+      const details = document.createElement("small");
+      details.textContent = description;
+      text.append(details);
+    }
+    const select = document.createElement("select");
+    select.id = id;
+    for (const optionData of options) {
+      const option = document.createElement("option");
+      option.value = optionData.value;
+      option.textContent = optionData.label;
+      select.append(option);
+    }
+    label.append(text, select);
     return label;
   }
 
@@ -209,10 +268,20 @@ export class InChatSettingsFeature implements Feature {
     this.setCheckbox("wolf-settings-debug", this.settings.debug.enabled);
     this.setCheckbox("wolf-settings-favorites-enabled", this.settings.favorites.enabled);
     this.setCheckbox("wolf-settings-show-icon", this.settings.favorites.showIcon);
+    this.setSelect(
+      "wolf-settings-item-name-display",
+      this.settings.favorites.itemNameDisplay,
+    );
     this.setCheckbox(
       "wolf-settings-remember-collapsed",
       this.settings.favorites.rememberCollapsed,
     );
+    this.setCheckbox("wolf-settings-folders-enabled", this.settings.folders.enabled);
+    this.setCheckbox(
+      "wolf-settings-folders-remember-collapsed",
+      this.settings.folders.rememberCollapsed,
+    );
+    this.setCheckbox("wolf-settings-folders-show-icons", this.settings.folders.showIcons);
   }
 
   private async saveForm(): Promise<void> {
@@ -226,6 +295,14 @@ export class InChatSettingsFeature implements Feature {
           enabled: this.getCheckbox("wolf-settings-favorites-enabled"),
           showIcon: this.getCheckbox("wolf-settings-show-icon"),
           rememberCollapsed: this.getCheckbox("wolf-settings-remember-collapsed"),
+          itemNameDisplay: this.getSelect("wolf-settings-item-name-display") === "full"
+            ? "full"
+            : "compact",
+        },
+        folders: {
+          enabled: this.getCheckbox("wolf-settings-folders-enabled"),
+          rememberCollapsed: this.getCheckbox("wolf-settings-folders-remember-collapsed"),
+          showIcons: this.getCheckbox("wolf-settings-folders-show-icons"),
         },
       });
       const status = this.overlay?.querySelector<HTMLElement>(
@@ -257,6 +334,17 @@ export class InChatSettingsFeature implements Feature {
     }
   }
 
+  private getSelect(id: string): string {
+    return this.overlay?.querySelector<HTMLSelectElement>(`#${id}`)?.value ?? "";
+  }
+
+  private setSelect(id: string, value: string): void {
+    const select = this.overlay?.querySelector<HTMLSelectElement>(`#${id}`);
+    if (select) {
+      select.value = value;
+    }
+  }
+
   private handleDialogKeydown(event: KeyboardEvent): void {
     if (event.key === "Escape") {
       event.preventDefault();
@@ -270,7 +358,7 @@ export class InChatSettingsFeature implements Feature {
 
     const focusable = Array.from(
       this.overlay.querySelectorAll<HTMLElement>(
-        'button:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex="-1"])',
+        'button:not(:disabled), input:not(:disabled), select:not(:disabled), [tabindex]:not([tabindex="-1"])',
       ),
     );
     const first = focusable[0];

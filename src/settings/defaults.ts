@@ -10,5 +10,11 @@ export const DEFAULT_SETTINGS: WolfExpansionSettings = {
     enabled: true,
     showIcon: true,
     rememberCollapsed: true,
+    itemNameDisplay: "compact",
+  },
+  folders: {
+    enabled: true,
+    rememberCollapsed: true,
+    showIcons: true,
   },
 };

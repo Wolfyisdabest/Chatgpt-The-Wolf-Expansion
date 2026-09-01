@@ -1,4 +1,4 @@
-import "./features/favorites/favorites.css";
+import "./features/quickAccess/quick-access.css";
 import "./features/settings/in-chat-settings.css";
 import { WolfExpansionApp } from "./core/app";
 

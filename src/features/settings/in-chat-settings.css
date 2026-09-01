@@ -14,10 +14,11 @@
   cursor: pointer;
   display: flex;
   font: inherit;
-  font-size: 0.78rem;
+  line-height: inherit;
   justify-content: space-between;
   opacity: 0.68;
-  padding: 0.3rem 0.5rem;
+  min-height: 2rem;
+  padding: 0.25rem 0.5rem;
   text-align: left;
   width: 100%;
 }
@@ -33,7 +34,8 @@
 
 .wolf-open-settings:focus-visible,
 .wolf-settings-close:focus-visible,
-.wolf-settings-row input:focus-visible {
+.wolf-settings-row input:focus-visible,
+.wolf-settings-row select:focus-visible {
   box-shadow: 0 0 0 2px currentColor;
 }
 
@@ -130,6 +132,25 @@
   accent-color: #10a37f;
   height: 1.15rem;
   width: 1.15rem;
+}
+
+.wolf-settings-row > span {
+  display: grid;
+  gap: 0.15rem;
+}
+
+.wolf-settings-row small {
+  line-height: 1.3;
+  opacity: 0.68;
+}
+
+.wolf-settings-row select {
+  background: var(--main-surface-primary, Canvas);
+  border: 1px solid color-mix(in srgb, currentColor 24%, transparent);
+  border-radius: 0.4rem;
+  color: inherit;
+  font: inherit;
+  padding: 0.35rem 0.5rem;
 }
 
 .wolf-settings-status {

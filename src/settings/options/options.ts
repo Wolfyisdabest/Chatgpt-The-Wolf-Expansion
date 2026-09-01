@@ -11,6 +11,14 @@ function requireCheckbox(id: string): HTMLInputElement {
   return element;
 }
 
+function requireSelect(id: string): HTMLSelectElement {
+  const element = document.getElementById(id);
+  if (!(element instanceof HTMLSelectElement)) {
+    throw new Error(`Missing select: ${id}`);
+  }
+  return element;
+}
+
 async function initializeOptions(): Promise<void> {
   const storage = new StorageService();
   const settingsService = new SettingsService(storage);
@@ -27,6 +35,10 @@ async function initializeOptions(): Promise<void> {
   const favoritesEnabled = requireCheckbox("favorites-enabled");
   const showIcon = requireCheckbox("favorites-show-icon");
   const rememberCollapsed = requireCheckbox("favorites-remember-collapsed");
+  const itemNameDisplay = requireSelect("favorites-item-name-display");
+  const foldersEnabled = requireCheckbox("folders-enabled");
+  const foldersRememberCollapsed = requireCheckbox("folders-remember-collapsed");
+  const foldersShowIcons = requireCheckbox("folders-show-icons");
   const renderSettings = async (): Promise<void> => {
     const settings = await settingsService.get();
     enabled.checked = settings.enabled;
@@ -34,6 +46,10 @@ async function initializeOptions(): Promise<void> {
     favoritesEnabled.checked = settings.favorites.enabled;
     showIcon.checked = settings.favorites.showIcon;
     rememberCollapsed.checked = settings.favorites.rememberCollapsed;
+    itemNameDisplay.value = settings.favorites.itemNameDisplay;
+    foldersEnabled.checked = settings.folders.enabled;
+    foldersRememberCollapsed.checked = settings.folders.rememberCollapsed;
+    foldersShowIcons.checked = settings.folders.showIcons;
   };
   await renderSettings();
 
@@ -55,6 +71,12 @@ async function initializeOptions(): Promise<void> {
           enabled: favoritesEnabled.checked,
           showIcon: showIcon.checked,
           rememberCollapsed: rememberCollapsed.checked,
+          itemNameDisplay: itemNameDisplay.value === "full" ? "full" : "compact",
+        },
+        folders: {
+          enabled: foldersEnabled.checked,
+          rememberCollapsed: foldersRememberCollapsed.checked,
+          showIcons: foldersShowIcons.checked,
         },
       });
       status.textContent = "Settings saved.";

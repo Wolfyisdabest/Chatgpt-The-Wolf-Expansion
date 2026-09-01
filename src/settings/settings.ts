@@ -1,6 +1,10 @@
 import type { Unsubscribe } from "../shared/types";
 import { normalizeSettings } from "../storage/migrations";
-import { STORAGE_KEYS, type WolfExpansionSettings } from "../storage/schemas";
+import {
+  STORAGE_KEYS,
+  type ItemNameDisplayMode,
+  type WolfExpansionSettings,
+} from "../storage/schemas";
 import type { KeyValueStorage } from "../storage/StorageService";
 import { DEFAULT_SETTINGS } from "./defaults";
 
@@ -13,6 +17,12 @@ export interface SettingsUpdate {
     enabled?: boolean;
     showIcon?: boolean;
     rememberCollapsed?: boolean;
+    itemNameDisplay?: ItemNameDisplayMode;
+  };
+  folders?: {
+    enabled?: boolean;
+    rememberCollapsed?: boolean;
+    showIcons?: boolean;
   };
 }
 
@@ -41,6 +51,14 @@ export class SettingsService {
         showIcon: update.favorites?.showIcon ?? current.favorites.showIcon,
         rememberCollapsed:
           update.favorites?.rememberCollapsed ?? current.favorites.rememberCollapsed,
+        itemNameDisplay:
+          update.favorites?.itemNameDisplay ?? current.favorites.itemNameDisplay,
+      },
+      folders: {
+        enabled: update.folders?.enabled ?? current.folders.enabled,
+        rememberCollapsed:
+          update.folders?.rememberCollapsed ?? current.folders.rememberCollapsed,
+        showIcons: update.folders?.showIcons ?? current.folders.showIcons,
       },
     };
     await this.save(next);

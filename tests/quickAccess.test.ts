@@ -1,0 +1,270 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import { normalizeConversationIdentity } from "../src/adapters/chatgpt/conversationIdentity";
+import { getFavoriteActionLabel } from "../src/features/favorites/favoriteActionState";
+import { FavoritesRepository } from "../src/features/favorites/FavoritesRepository";
+import { FoldersRepository } from "../src/features/folders/FoldersRepository";
+import {
+  buildQuickAccessProjection,
+  getValidFolderDestinations,
+} from "../src/features/quickAccess/quickAccessProjection";
+import { migrateStorage } from "../src/storage/migrations";
+import { STORAGE_KEYS } from "../src/storage/schemas";
+import { MemoryStorage } from "./helpers/MemoryStorage";
+
+function conversation(conversationId: string, title = conversationId) {
+  return { conversationId, title, url: `https://chatgpt.com/c/${conversationId}` };
+}
+
+function repositories() {
+  const storage = new MemoryStorage();
+  let nextId = 1;
+  return {
+    storage,
+    favorites: new FavoritesRepository(storage),
+    folders: new FoldersRepository(storage, undefined, () => `folder-${nextId++}`),
+  };
+}
+
+test("user-facing Favorites terminology maps to Quick Access without renaming storage", () => {
+  assert.equal(getFavoriteActionLabel(false, "menu"), "Add to Quick Access");
+  assert.equal(getFavoriteActionLabel(true, "menu"), "Remove from Quick Access");
+  assert.equal(STORAGE_KEYS.favorites, "wolfExpansion.favorites");
+});
+
+test("root and nested projections structurally keep folders above chats", async () => {
+  const { favorites, folders } = repositories();
+  const rootA = await folders.createFolder("A");
+  const rootB = await folders.createFolder("B");
+  const child = await folders.createFolder("Child", rootA.id);
+  await folders.assignConversation(rootA.id, conversation("folder-chat"));
+  await folders.assignConversation(child.id, conversation("nested-chat"));
+  await favorites.add(conversation("folder-chat"));
+  await favorites.add(conversation("nested-chat"));
+  await favorites.add(conversation("loose-chat"));
+
+  const projection = buildQuickAccessProjection(
+    await favorites.list(),
+    await folders.listFolders(),
+    await folders.listMembership(),
+    { quickAccessEnabled: true, foldersEnabled: true },
+  );
+  assert.deepEqual(projection.folders.map((folder) => folder.folder.id), [rootA.id, rootB.id]);
+  assert.deepEqual(projection.looseChats.map((chat) => chat.conversationId), ["loose-chat"]);
+  assert.deepEqual(projection.folders[0]?.folders.map((folder) => folder.folder.id), [child.id]);
+  assert.deepEqual(projection.folders[0]?.chats.map((chat) => chat.conversationId), ["folder-chat"]);
+});
+
+test("folder nesting, cross-parent movement, root movement, and sibling reorder persist", async () => {
+  const { folders } = repositories();
+  const first = await folders.createFolder("First");
+  const second = await folders.createFolder("Second");
+  const nested = await folders.createFolder("Nested", first.id);
+  const sibling = await folders.createFolder("Sibling", first.id);
+
+  await folders.moveFolder(first.id, second.id);
+  assert.equal((await folders.listFolders()).find((folder) => folder.id === first.id)?.parentId, second.id);
+  await folders.moveFolder(nested.id, second.id);
+  assert.equal((await folders.listFolders()).find((folder) => folder.id === nested.id)?.parentId, second.id);
+  await folders.moveFolder(nested.id, null);
+  assert.equal((await folders.listFolders()).find((folder) => folder.id === nested.id)?.parentId, null);
+  await folders.moveFolder(nested.id, null, 0);
+  assert.equal((await folders.getTree())[0]?.folder.id, nested.id);
+  await folders.moveFolder(sibling.id, second.id, 0);
+  assert.equal((await folders.getTree()).find((node) => node.folder.id === second.id)?.children[0]?.folder.id, sibling.id);
+  const rootOrder = (await folders.getTree()).map((node) => node.folder.id);
+  const movingRoot = rootOrder[0];
+  if (movingRoot) {
+    await folders.moveFolder(movingRoot, null, rootOrder.length);
+    assert.equal((await folders.getTree()).at(-1)?.folder.id, movingRoot);
+  }
+});
+
+test("folder self-drop and descendant-cycle moves remain rejected", async () => {
+  const { folders } = repositories();
+  const root = await folders.createFolder("Root");
+  const child = await folders.createFolder("Child", root.id);
+  await assert.rejects(folders.moveFolder(root.id, root.id), /itself or one of its descendants/);
+  await assert.rejects(folders.moveFolder(root.id, child.id), /itself or one of its descendants/);
+});
+
+test("valid Move Into destinations exclude self and descendants", async () => {
+  const { folders } = repositories();
+  const root = await folders.createFolder("Root");
+  const child = await folders.createFolder("Child", root.id);
+  const grandchild = await folders.createFolder("Grandchild", child.id);
+  const other = await folders.createFolder("Other");
+  assert.deepEqual(
+    getValidFolderDestinations(await folders.listFolders(), root.id).map((folder) => folder.id),
+    [other.id],
+  );
+  assert.ok(grandchild.id);
+});
+
+test("native/sidebar identity is normalized before structured-clone-safe folder assignment", async () => {
+  const { storage, folders } = repositories();
+  const folder = await folders.createFolder("Target");
+  const domFacing = {
+    conversationId: "native-chat",
+    title: "Native chat",
+    url: "/c/native-chat",
+    link: () => "non-cloneable simulated DOM reference",
+  };
+  const normalized = normalizeConversationIdentity(domFacing);
+  assert.equal(normalized.ok, true);
+  if (!normalized.ok) {
+    return;
+  }
+  await folders.assignConversation(folder.id, normalized.conversation);
+  const stored = await storage.get<unknown[]>(STORAGE_KEYS.folderMembership, []);
+  assert.doesNotThrow(() => structuredClone(stored));
+  assert.equal(Object.hasOwn(stored[0] as object, "link"), false);
+});
+
+test("Quick Access and folder membership remain independent through drag-style assignment", async () => {
+  const { favorites, folders } = repositories();
+  const first = await folders.createFolder("First");
+  const second = await folders.createFolder("Second");
+  await favorites.add(conversation("shared"));
+  await folders.assignConversation(first.id, conversation("shared"));
+  assert.equal(await favorites.isFavorite("shared"), true);
+  await folders.assignConversation(second.id, conversation("shared"));
+  assert.equal((await folders.getMembership("shared"))?.folderId, second.id);
+  assert.equal(await favorites.isFavorite("shared"), true);
+});
+
+test("legacy folder-only data is preserved but hidden and combined chat renders once", async () => {
+  const { favorites, folders } = repositories();
+  const folder = await folders.createFolder("Folder");
+  await folders.assignConversation(folder.id, conversation("folder-only"));
+  await folders.assignConversation(folder.id, conversation("shared"));
+  await favorites.add(conversation("shared"));
+  const projection = buildQuickAccessProjection(
+    await favorites.list(),
+    await folders.listFolders(),
+    await folders.listMembership(),
+    { quickAccessEnabled: true, foldersEnabled: true },
+  );
+  const chats = projection.folders[0]?.chats ?? [];
+  assert.equal(chats.some((chat) => chat.conversationId === "folder-only"), false);
+  assert.equal(chats.find((chat) => chat.conversationId === "shared")?.isQuickAccess, true);
+  assert.equal(projection.looseChats.some((chat) => chat.conversationId === "shared"), false);
+  await folders.removeConversation("folder-only");
+  const afterUnfile = buildQuickAccessProjection(
+    await favorites.list(),
+    await folders.listFolders(),
+    await folders.listMembership(),
+    { quickAccessEnabled: true, foldersEnabled: true },
+  );
+  assert.equal(
+    afterUnfile.folders[0]?.chats.some((chat) => chat.conversationId === "folder-only"),
+    false,
+  );
+});
+
+test("membership removal returns a Quick Access chat to the loose root", async () => {
+  const { favorites, folders } = repositories();
+  const folder = await folders.createFolder("Folder");
+  await favorites.add(conversation("shared"));
+  await folders.assignConversation(folder.id, conversation("shared"));
+  await folders.removeConversation("shared");
+  const projection = buildQuickAccessProjection(
+    await favorites.list(),
+    await folders.listFolders(),
+    await folders.listMembership(),
+    { quickAccessEnabled: true, foldersEnabled: true },
+  );
+  assert.deepEqual(projection.looseChats.map((chat) => chat.conversationId), ["shared"]);
+});
+
+test("a direct legacy Favorites removal cannot expose a folder-only alias", async () => {
+  const { favorites, folders } = repositories();
+  const folder = await folders.createFolder("Folder");
+  await favorites.add(conversation("shared"));
+  await folders.assignConversation(folder.id, conversation("shared"));
+  await favorites.remove("shared");
+  const projection = buildQuickAccessProjection(
+    await favorites.list(),
+    await folders.listFolders(),
+    await folders.listMembership(),
+    { quickAccessEnabled: true, foldersEnabled: true },
+  );
+  assert.equal(projection.folders[0]?.chats.length, 0);
+  assert.equal((await folders.getMembership("shared"))?.folderId, folder.id);
+});
+
+test("root Quick Access and folder chat ordering persist independently", async () => {
+  const { favorites, folders } = repositories();
+  const folder = await folders.createFolder("Folder");
+  await favorites.add(conversation("root-a"));
+  await favorites.add(conversation("root-b"));
+  await favorites.reorder(["root-b", "root-a"]);
+  await folders.assignConversation(folder.id, conversation("folder-a"));
+  await folders.assignConversation(folder.id, conversation("folder-b"));
+  await folders.reorderConversations(folder.id, ["folder-b", "folder-a"]);
+  assert.deepEqual((await favorites.list()).map((item) => item.conversationId), ["root-b", "root-a"]);
+  assert.deepEqual((await folders.getFolderContents(folder.id)).map((item) => item.conversationId), ["folder-b", "folder-a"]);
+});
+
+test("projection treats Folders as subordinate to Quick Access", async () => {
+  const { favorites, folders } = repositories();
+  const folder = await folders.createFolder("Folder");
+  await favorites.add(conversation("loose"));
+  await favorites.add(conversation("filed"));
+  await folders.assignConversation(folder.id, conversation("filed"));
+  const data = [await favorites.list(), await folders.listFolders(), await folders.listMembership()] as const;
+  const foldersOnly = buildQuickAccessProjection(...data, {
+    quickAccessEnabled: false,
+    foldersEnabled: true,
+  });
+  assert.equal(foldersOnly.visible, false);
+  assert.equal(foldersOnly.folders.length, 0);
+  assert.equal(foldersOnly.looseChats.length, 0);
+  const quickOnly = buildQuickAccessProjection(...data, {
+    quickAccessEnabled: true,
+    foldersEnabled: false,
+  });
+  assert.equal(quickOnly.folders.length, 0);
+  assert.deepEqual(
+    quickOnly.looseChats.map((chat) => chat.conversationId),
+    ["loose", "filed"],
+  );
+  const restored = buildQuickAccessProjection(...data, {
+    quickAccessEnabled: true,
+    foldersEnabled: true,
+  });
+  assert.equal(restored.folders[0]?.chats[0]?.conversationId, "filed");
+  assert.deepEqual(restored.looseChats.map((chat) => chat.conversationId), ["loose"]);
+  const neither = buildQuickAccessProjection(...data, {
+    quickAccessEnabled: false,
+    foldersEnabled: false,
+  });
+  assert.equal(neither.visible, false);
+});
+
+test("unified section UI state migrates from the legacy visible section state", async () => {
+  const storage = new MemoryStorage();
+  await storage.set(STORAGE_KEYS.settings, {
+    enabled: true,
+    favorites: { enabled: false, showIcon: true, rememberCollapsed: true },
+    folders: { enabled: true, rememberCollapsed: true, showIcons: true },
+  });
+  await storage.set(STORAGE_KEYS.uiState, { collapsed: false });
+  await storage.set(STORAGE_KEYS.foldersUiState, { collapsed: true });
+  await migrateStorage(storage);
+  assert.deepEqual(await storage.get(STORAGE_KEYS.quickAccessUiState, null), { collapsed: true });
+});
+
+test("duplicate folder names remain supported in unified projections", async () => {
+  const { folders } = repositories();
+  await folders.createFolder("Duplicate");
+  await folders.createFolder("Duplicate");
+  const projection = buildQuickAccessProjection(
+    [],
+    await folders.listFolders(),
+    [],
+    { quickAccessEnabled: true, foldersEnabled: true },
+  );
+  assert.equal(projection.folders.length, 2);
+  assert.notEqual(projection.folders[0]?.folder.id, projection.folders[1]?.folder.id);
+});

@@ -4,11 +4,17 @@ import {
   STORAGE_SCHEMA_VERSION,
   type FavoriteConversation,
   type FavoritesUiState,
+  type FolderConversationMembership,
+  type FolderRecord,
+  type FoldersUiState,
+  type QuickAccessUiState,
   type WolfExpansionSettings,
 } from "./schemas";
 import type { KeyValueStorage } from "./StorageService";
 
 const DEFAULT_UI_STATE: FavoritesUiState = { collapsed: false };
+const DEFAULT_FOLDERS_UI_STATE: FoldersUiState = { collapsed: false };
+const DEFAULT_QUICK_ACCESS_UI_STATE: QuickAccessUiState = { collapsed: false };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
@@ -26,6 +32,29 @@ export async function migrateStorage(storage: KeyValueStorage): Promise<void> {
   const favorites = normalizeFavorites(rawFavorites);
   const rawUiState = await storage.get<unknown>(STORAGE_KEYS.uiState, DEFAULT_UI_STATE);
   const uiState = normalizeUiState(rawUiState);
+  const rawFolders = await storage.get<unknown>(STORAGE_KEYS.folders, []);
+  const folders = normalizeFolders(rawFolders);
+  const rawFolderMembership = await storage.get<unknown>(STORAGE_KEYS.folderMembership, []);
+  const folderMembership = normalizeFolderMembership(
+    rawFolderMembership,
+    new Set(folders.map((folder) => folder.id)),
+  );
+  const rawFoldersUiState = await storage.get<unknown>(
+    STORAGE_KEYS.foldersUiState,
+    DEFAULT_FOLDERS_UI_STATE,
+  );
+  const foldersUiState = normalizeFoldersUiState(rawFoldersUiState);
+  const rawQuickAccessUiState = await storage.get<unknown>(
+    STORAGE_KEYS.quickAccessUiState,
+    undefined,
+  );
+  const quickAccessUiState = rawQuickAccessUiState === undefined
+    ? {
+        collapsed: settings.favorites.enabled
+          ? uiState.collapsed
+          : foldersUiState.collapsed,
+      }
+    : normalizeQuickAccessUiState(rawQuickAccessUiState);
 
   const changes: Record<string, unknown> = {};
   if (rawSchemaVersion !== STORAGE_SCHEMA_VERSION) {
@@ -40,6 +69,18 @@ export async function migrateStorage(storage: KeyValueStorage): Promise<void> {
   if (JSON.stringify(rawUiState) !== JSON.stringify(uiState)) {
     changes[STORAGE_KEYS.uiState] = uiState;
   }
+  if (JSON.stringify(rawFolders) !== JSON.stringify(folders)) {
+    changes[STORAGE_KEYS.folders] = folders;
+  }
+  if (JSON.stringify(rawFolderMembership) !== JSON.stringify(folderMembership)) {
+    changes[STORAGE_KEYS.folderMembership] = folderMembership;
+  }
+  if (JSON.stringify(rawFoldersUiState) !== JSON.stringify(foldersUiState)) {
+    changes[STORAGE_KEYS.foldersUiState] = foldersUiState;
+  }
+  if (JSON.stringify(rawQuickAccessUiState) !== JSON.stringify(quickAccessUiState)) {
+    changes[STORAGE_KEYS.quickAccessUiState] = quickAccessUiState;
+  }
 
   if (Object.keys(changes).length > 0) {
     await storage.setMany(changes);
@@ -50,6 +91,7 @@ export function normalizeSettings(value: unknown): WolfExpansionSettings {
   const root = isRecord(value) ? value : {};
   const debug = isRecord(root.debug) ? root.debug : {};
   const favorites = isRecord(root.favorites) ? root.favorites : {};
+  const folders = isRecord(root.folders) ? root.folders : {};
 
   return {
     schemaVersion: STORAGE_SCHEMA_VERSION,
@@ -67,6 +109,15 @@ export function normalizeSettings(value: unknown): WolfExpansionSettings {
         favorites.rememberCollapsed,
         DEFAULT_SETTINGS.favorites.rememberCollapsed,
       ),
+      itemNameDisplay: favorites.itemNameDisplay === "full" ? "full" : "compact",
+    },
+    folders: {
+      enabled: readBoolean(folders.enabled, DEFAULT_SETTINGS.folders.enabled),
+      rememberCollapsed: readBoolean(
+        folders.rememberCollapsed,
+        DEFAULT_SETTINGS.folders.rememberCollapsed,
+      ),
+      showIcons: readBoolean(folders.showIcons, DEFAULT_SETTINGS.folders.showIcons),
     },
   };
 }
@@ -114,4 +165,146 @@ export function normalizeFavorites(value: unknown): FavoriteConversation[] {
 export function normalizeUiState(value: unknown): FavoritesUiState {
   const state = isRecord(value) ? value : {};
   return { collapsed: readBoolean(state.collapsed, DEFAULT_UI_STATE.collapsed) };
+}
+
+export function normalizeFolders(value: unknown): FolderRecord[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const folders: FolderRecord[] = [];
+  const seenIds = new Set<string>();
+  for (const item of value) {
+    if (!isRecord(item) || typeof item.id !== "string" || typeof item.name !== "string") {
+      continue;
+    }
+    const id = item.id.trim();
+    const name = item.name.trim();
+    if (!id || !name || seenIds.has(id)) {
+      continue;
+    }
+    seenIds.add(id);
+    folders.push({
+      id,
+      name: name.slice(0, 100),
+      parentId: typeof item.parentId === "string" && item.parentId.trim()
+        ? item.parentId.trim()
+        : null,
+      sortIndex: typeof item.sortIndex === "number" ? item.sortIndex : folders.length,
+      createdAt: typeof item.createdAt === "number" ? item.createdAt : Date.now(),
+      collapsed: readBoolean(item.collapsed, false),
+    });
+  }
+
+  const byId = new Map(folders.map((folder) => [folder.id, folder]));
+  for (const folder of folders) {
+    if (folder.parentId === folder.id || (folder.parentId && !byId.has(folder.parentId))) {
+      folder.parentId = null;
+    }
+  }
+  for (const folder of folders) {
+    const visited = new Set([folder.id]);
+    let parentId = folder.parentId;
+    while (parentId) {
+      if (visited.has(parentId)) {
+        folder.parentId = null;
+        break;
+      }
+      visited.add(parentId);
+      parentId = byId.get(parentId)?.parentId ?? null;
+    }
+  }
+
+  return normalizeFolderSiblingIndexes(folders);
+}
+
+export function normalizeFolderMembership(
+  value: unknown,
+  validFolderIds?: ReadonlySet<string>,
+): FolderConversationMembership[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+
+  const memberships: FolderConversationMembership[] = [];
+  const seenConversationIds = new Set<string>();
+  for (const item of value) {
+    if (
+      !isRecord(item) ||
+      typeof item.conversationId !== "string" ||
+      typeof item.folderId !== "string"
+    ) {
+      continue;
+    }
+    const conversationId = item.conversationId.trim();
+    const folderId = item.folderId.trim();
+    if (
+      !conversationId ||
+      !folderId ||
+      seenConversationIds.has(conversationId) ||
+      (validFolderIds && !validFolderIds.has(folderId))
+    ) {
+      continue;
+    }
+    const title = typeof item.title === "string" && item.title.trim()
+      ? item.title.trim()
+      : "Untitled conversation";
+    seenConversationIds.add(conversationId);
+    memberships.push({
+      conversationId,
+      folderId,
+      title,
+      url: `https://chatgpt.com/c/${encodeURIComponent(conversationId)}`,
+      assignedAt: typeof item.assignedAt === "number" ? item.assignedAt : Date.now(),
+      sortIndex: typeof item.sortIndex === "number" ? item.sortIndex : memberships.length,
+    });
+  }
+
+  return normalizeMembershipIndexes(memberships);
+}
+
+export function normalizeFoldersUiState(value: unknown): FoldersUiState {
+  const state = isRecord(value) ? value : {};
+  return { collapsed: readBoolean(state.collapsed, DEFAULT_FOLDERS_UI_STATE.collapsed) };
+}
+
+export function normalizeQuickAccessUiState(value: unknown): QuickAccessUiState {
+  const state = isRecord(value) ? value : {};
+  return { collapsed: readBoolean(state.collapsed, DEFAULT_QUICK_ACCESS_UI_STATE.collapsed) };
+}
+
+function normalizeFolderSiblingIndexes(folders: FolderRecord[]): FolderRecord[] {
+  const groups = new Map<string | null, FolderRecord[]>();
+  for (const folder of folders) {
+    const siblings = groups.get(folder.parentId) ?? [];
+    siblings.push(folder);
+    groups.set(folder.parentId, siblings);
+  }
+  for (const siblings of groups.values()) {
+    siblings
+      .sort((left, right) => left.sortIndex - right.sortIndex || left.createdAt - right.createdAt)
+      .forEach((folder, sortIndex) => {
+        folder.sortIndex = sortIndex;
+      });
+  }
+  return folders;
+}
+
+function normalizeMembershipIndexes(
+  memberships: FolderConversationMembership[],
+): FolderConversationMembership[] {
+  const groups = new Map<string, FolderConversationMembership[]>();
+  for (const membership of memberships) {
+    const contents = groups.get(membership.folderId) ?? [];
+    contents.push(membership);
+    groups.set(membership.folderId, contents);
+  }
+  for (const contents of groups.values()) {
+    contents
+      .sort((left, right) => left.sortIndex - right.sortIndex || left.assignedAt - right.assignedAt)
+      .forEach((membership, sortIndex) => {
+        membership.sortIndex = sortIndex;
+      });
+  }
+  return memberships;
 }

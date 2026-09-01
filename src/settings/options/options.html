@@ -34,33 +34,68 @@
         </fieldset>
 
         <fieldset>
-          <legend>Sidebar</legend>
+          <legend>Quick Access</legend>
           <label class="setting-row">
             <span>
-              <strong>Enable Favorites</strong>
-              <small>Shows extension-owned favorite conversations in ChatGPT.</small>
+              <strong>Enable Quick Access</strong>
+              <small>Show Wolf Expansion's chat organization system.</small>
             </span>
             <input id="favorites-enabled" type="checkbox" />
           </label>
           <label class="setting-row">
             <span>
-              <strong>Show Favorites icon</strong>
-              <small>Displays the star beside the Favorites heading.</small>
+              <strong>Show Quick Access star icons</strong>
+              <small>Displays add/remove stars on ChatGPT conversation rows.</small>
             </span>
             <input id="favorites-show-icon" type="checkbox" />
           </label>
           <label class="setting-row">
             <span>
-              <strong>Remember collapsed state</strong>
-              <small>Keeps the Favorites section collapsed or expanded between sessions.</small>
+              <strong>Remember Quick Access section collapsed state</strong>
+              <small>Keeps the unified Quick Access section collapsed or expanded between sessions.</small>
             </span>
             <input id="favorites-remember-collapsed" type="checkbox" />
+          </label>
+          <label class="setting-row">
+            <span>
+              <strong>Item name display</strong>
+              <small>Compact keeps one-line names and reveals overflow on hover; Full wraps names.</small>
+            </span>
+            <select id="favorites-item-name-display">
+              <option value="compact">Compact</option>
+              <option value="full">Full</option>
+            </select>
+          </label>
+        </fieldset>
+
+        <fieldset>
+          <legend>Folders</legend>
+          <label class="setting-row">
+            <span>
+              <strong>Enable Folders</strong>
+              <small>Organize Quick Access chats into folders and subfolders.</small>
+            </span>
+            <input id="folders-enabled" type="checkbox" />
+          </label>
+          <label class="setting-row">
+            <span>
+              <strong>Remember folder collapse state</strong>
+              <small>Keeps individual folders collapsed between sessions.</small>
+            </span>
+            <input id="folders-remember-collapsed" type="checkbox" />
+          </label>
+          <label class="setting-row">
+            <span>
+              <strong>Show folder icons</strong>
+              <small>Displays folder icons in the sidebar hierarchy.</small>
+            </span>
+            <input id="folders-show-icons" type="checkbox" />
           </label>
         </fieldset>
       </form>
 
       <p id="status" class="status" role="status" aria-live="polite"></p>
-      <footer>v0.1.0-dev.5 · No telemetry · No account required</footer>
+      <footer>v0.1.0-dev.7.2 · No telemetry · No account required</footer>
     </main>
     <script src="options.js"></script>
   </body>

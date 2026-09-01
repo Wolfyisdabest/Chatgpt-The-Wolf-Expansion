@@ -9,6 +9,10 @@ import {
   type PendingMenuTarget,
 } from "./menuContext";
 import { CHATGPT_SELECTORS } from "./selectors";
+import {
+  getWolfRootInsertionIndex,
+  type SidebarSectionKind,
+} from "./sidebarPlacement";
 
 export interface ConversationIdentity {
   conversationId: string;
@@ -23,6 +27,7 @@ export interface ConversationReference extends ConversationIdentity {
 export interface SidebarInsertionTarget {
   parent: HTMLElement;
   before: Element | null;
+  placement: "before-pinned" | "before-history" | "fallback";
 }
 
 export interface ConversationMenuContext {
@@ -60,6 +65,8 @@ export interface ChatGPTAdapter {
 const MENU_CONTEXT_MAX_AGE_MS = 3_000;
 
 export class DefaultChatGPTAdapter implements ChatGPTAdapter {
+  private lastNativePinnedExpanded: boolean | null | undefined;
+
   public constructor(private readonly logger: Logger) {}
 
   public findSidebar(): HTMLElement | null {
@@ -87,9 +94,86 @@ export class DefaultChatGPTAdapter implements ChatGPTAdapter {
       return null;
     }
 
+    const pinnedMarker = this.findSidebarSectionMarker(sidebar, "pinned");
+    const historyMarker = this.findSidebarSectionMarker(sidebar, "history");
+    if (pinnedMarker && historyMarker) {
+      const sharedParent = this.findLowestSharedParent(
+        pinnedMarker,
+        historyMarker,
+        sidebar,
+      );
+      const pinnedSection = sharedParent
+        ? this.findDirectChildContaining(sharedParent, pinnedMarker)
+        : null;
+      const historySection = sharedParent
+        ? this.findDirectChildContaining(sharedParent, historyMarker)
+        : null;
+      if (
+        sharedParent &&
+        pinnedSection &&
+        historySection &&
+        pinnedSection !== historySection
+      ) {
+        this.logNativePinnedState(pinnedMarker);
+        this.logger.debug("Stable Wolf sidebar anchor resolved.", {
+          beforePinned: true,
+          beforeHistory: false,
+        });
+        return {
+          parent: sharedParent,
+          before: pinnedSection,
+          placement: "before-pinned",
+        };
+      }
+    }
+
+    const singleMarker = pinnedMarker ?? historyMarker;
+    if (singleMarker) {
+      const section = this.findStableSectionBoundary(singleMarker, sidebar);
+      if (section?.parentElement instanceof HTMLElement) {
+        if (pinnedMarker) {
+          this.logNativePinnedState(pinnedMarker);
+        }
+        const placement = pinnedMarker ? "before-pinned" : "before-history";
+        this.logger.debug("Stable Wolf sidebar anchor resolved.", {
+          beforePinned: placement === "before-pinned",
+          beforeHistory: placement === "before-history",
+        });
+        return {
+          parent: section.parentElement,
+          before: section,
+          placement,
+        };
+      }
+    }
+
+    const nativeSections = Array.from(sidebar.children).filter(
+      (element): element is HTMLElement =>
+        element instanceof HTMLElement && !isWolfElement(element),
+    );
+    const sectionKinds = nativeSections.map((section) =>
+      this.classifySidebarSection(section));
+    if (sectionKinds.includes("pinned") || sectionKinds.includes("history")) {
+      const insertionIndex = getWolfRootInsertionIndex(sectionKinds);
+      const before = nativeSections[insertionIndex] ?? null;
+      const pinnedIndex = sectionKinds.indexOf("pinned");
+      if (pinnedIndex >= 0) {
+        this.logNativePinnedState(nativeSections[pinnedIndex]!);
+      }
+      this.logger.debug("Stable Wolf sidebar anchor resolved.", {
+        beforePinned: pinnedIndex >= 0,
+        beforeHistory: sectionKinds[insertionIndex] === "history",
+      });
+      return {
+        parent: sidebar,
+        before,
+        placement: pinnedIndex >= 0 ? "before-pinned" : "before-history",
+      };
+    }
+
     const firstConversationLink = this.findConversationLinks()[0];
     if (!firstConversationLink || !sidebar.contains(firstConversationLink)) {
-      return { parent: sidebar, before: sidebar.lastElementChild };
+      return { parent: sidebar, before: sidebar.lastElementChild, placement: "fallback" };
     }
 
     let section: Element = firstConversationLink;
@@ -97,7 +181,7 @@ export class DefaultChatGPTAdapter implements ChatGPTAdapter {
       section = section.parentElement;
     }
 
-    return { parent: sidebar, before: section };
+    return { parent: sidebar, before: section, placement: "fallback" };
   }
 
   public findConversationLinks(): HTMLAnchorElement[] {
@@ -301,7 +385,7 @@ export class DefaultChatGPTAdapter implements ChatGPTAdapter {
           subtree: true,
           characterData: true,
           attributes: true,
-          attributeFilter: ["href", "aria-label", "title"],
+          attributeFilter: ["href", "aria-expanded", "aria-label", "title"],
         });
       }
       callback();
@@ -708,6 +792,175 @@ export class DefaultChatGPTAdapter implements ChatGPTAdapter {
     ]
       .filter((value): value is string => Boolean(value))
       .join(" ");
+  }
+
+  private classifySidebarSection(section: HTMLElement): SidebarSectionKind {
+    const candidates = [
+      section,
+      ...section.querySelectorAll<HTMLElement>(CHATGPT_SELECTORS.sidebarSectionLabel),
+    ];
+    for (const candidate of candidates) {
+      if (
+        candidate.matches(CHATGPT_SELECTORS.conversationLink) ||
+        candidate.closest(`[${WOLF_ATTRIBUTE}]`)
+      ) {
+        continue;
+      }
+      const descriptors = [
+        candidate.getAttribute("aria-label"),
+        candidate.getAttribute("title"),
+        candidate.getAttribute("data-testid"),
+        candidate.textContent,
+      ]
+        .filter((value): value is string => Boolean(value));
+      for (const value of descriptors) {
+        const descriptor = value.replace(/\s+/gu, " ").trim();
+        if (/^(?:expand |collapse )?pinned(?: chats| conversations)?$/iu.test(descriptor)) {
+          return "pinned";
+        }
+        if (/^(?:expand |collapse )?(?:recent(?: chats)?|chats|your chats)$/iu.test(descriptor)) {
+          return "history";
+        }
+      }
+    }
+    return "other";
+  }
+
+  private findSidebarSectionMarker(
+    sidebar: HTMLElement,
+    kind: Exclude<SidebarSectionKind, "other">,
+  ): HTMLElement | null {
+    const candidates = [
+      sidebar,
+      ...sidebar.querySelectorAll<HTMLElement>(CHATGPT_SELECTORS.sidebarSectionLabel),
+    ];
+    return candidates.find((candidate) => {
+      if (
+        candidate.closest(`[${WOLF_ATTRIBUTE}]`) ||
+        candidate.matches(CHATGPT_SELECTORS.conversationLink)
+      ) {
+        return false;
+      }
+      return this.getSidebarMarkerKind(candidate) === kind;
+    }) ?? null;
+  }
+
+  private getSidebarMarkerKind(element: HTMLElement): SidebarSectionKind {
+    const descriptors = [
+      element.getAttribute("aria-label"),
+      element.getAttribute("title"),
+      element.getAttribute("data-testid"),
+      element.textContent,
+    ]
+      .filter((value): value is string => Boolean(value))
+      .map((value) => value.replace(/\s+/gu, " ").trim());
+    if (descriptors.some((value) =>
+      /^(?:expand |collapse )?pinned(?: chats| conversations)?$/iu.test(value))) {
+      return "pinned";
+    }
+    if (descriptors.some((value) =>
+      /^(?:expand |collapse )?(?:recent(?: chats)?|chats|your chats)$/iu.test(value))) {
+      return "history";
+    }
+    return "other";
+  }
+
+  private findLowestSharedParent(
+    first: Element,
+    second: Element,
+    boundary: HTMLElement,
+  ): HTMLElement | null {
+    const secondAncestors = new Set<Element>();
+    let secondCandidate: Element | null = second;
+    while (secondCandidate) {
+      secondAncestors.add(secondCandidate);
+      if (secondCandidate === boundary) {
+        break;
+      }
+      secondCandidate = secondCandidate.parentElement;
+    }
+
+    let firstCandidate: Element | null = first;
+    while (firstCandidate) {
+      if (secondAncestors.has(firstCandidate) && firstCandidate instanceof HTMLElement) {
+        return firstCandidate;
+      }
+      if (firstCandidate === boundary) {
+        break;
+      }
+      firstCandidate = firstCandidate.parentElement;
+    }
+    return null;
+  }
+
+  private findStableSectionBoundary(
+    marker: HTMLElement,
+    sidebar: HTMLElement,
+  ): HTMLElement | null {
+    let candidate: HTMLElement | null = marker;
+    while (candidate && candidate !== sidebar) {
+      if (
+        candidate !== marker &&
+        candidate.querySelector(CHATGPT_SELECTORS.conversationLink)
+      ) {
+        return candidate;
+      }
+      candidate = candidate.parentElement;
+    }
+
+    const semanticOwner = marker.closest<HTMLElement>(
+      "section, [role=\"region\"], [role=\"group\"]",
+    );
+    if (semanticOwner && semanticOwner !== sidebar && sidebar.contains(semanticOwner)) {
+      return semanticOwner;
+    }
+    return marker.parentElement && marker.parentElement !== sidebar
+      ? marker.parentElement
+      : marker;
+  }
+
+  private logNativePinnedState(section: HTMLElement): void {
+    const pinnedExpanded = this.getNativePinnedExpanded(section);
+    if (
+      pinnedExpanded !== null &&
+      pinnedExpanded !== this.lastNativePinnedExpanded
+    ) {
+      this.logger.debug("Native Pinned state changed.", { expanded: pinnedExpanded });
+    }
+    this.lastNativePinnedExpanded = pinnedExpanded;
+  }
+
+  private getNativePinnedExpanded(section: HTMLElement): boolean | null {
+    const candidates = [
+      section,
+      ...section.querySelectorAll<HTMLElement>(CHATGPT_SELECTORS.sidebarSectionLabel),
+    ];
+    for (const candidate of candidates) {
+      if (candidate.closest(`[${WOLF_ATTRIBUTE}]`)) {
+        continue;
+      }
+      const descriptor = [
+        candidate.getAttribute("aria-label"),
+        candidate.getAttribute("title"),
+        candidate.getAttribute("data-testid"),
+        candidate.textContent,
+      ]
+        .filter((value): value is string => Boolean(value))
+        .map((value) => value.replace(/\s+/gu, " ").trim())
+        .find((value) =>
+          /^(?:expand |collapse )?pinned(?: chats| conversations)?$/iu.test(value));
+      if (!descriptor) {
+        continue;
+      }
+      const expanded = candidate.getAttribute("aria-expanded");
+      if (expanded === "true") {
+        return true;
+      }
+      if (expanded === "false") {
+        return false;
+      }
+    }
+    return null;
   }
 
   private findDirectChildContaining(parent: HTMLElement, descendant: Element): Element | null {
