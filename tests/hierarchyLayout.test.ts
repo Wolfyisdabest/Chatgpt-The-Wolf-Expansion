@@ -69,6 +69,10 @@ test("Compact and Full CSS use fade clipping without ellipsis", () => {
   assert.match(css, /-webkit-line-clamp:\s*2;/);
   assert.match(css, /overflow-wrap:\s*anywhere;/);
   assert.doesNotMatch(css, /text-overflow:\s*ellipsis;/);
+  assert.match(
+    css,
+    /data-reveal-active="true"[\s\S]*data-reveal-returning="true"[\s\S]*mask-image:\s*none;/,
+  );
 });
 
 test("compact overflow calculations remain scoped to the indented text viewport", () => {

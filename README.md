@@ -6,18 +6,20 @@
 
 ChatGPT: The Wolf Expansion is a free, open-source Firefox and Floorp extension that adds missing power-user features to ChatGPT while preserving ChatGPT's normal interface.
 
-> **Development status:** `v0.1-dev.8.1` — Sidebar Readability & Settings Polish. This is an early development build intended for manual testing. ChatGPT's DOM changes frequently, so integrations may need ongoing adapter updates.
+> **Development status:** `v0.1-dev.8.2` — Live Title Sync & Title Integrity. This is an early development build intended for manual testing. ChatGPT's DOM changes frequently, so integrations may need ongoing adapter updates.
 
 This project is unofficial and is not affiliated with, endorsed by, or sponsored by OpenAI.
 
-## Implemented in v0.1-dev.8.1
+## Implemented in v0.1-dev.8.2
 
 - An unlimited extension-owned **Quick Access** system, internally backed by the proven Favorites repository and stable ChatGPT conversation IDs.
 - One native-looking sidebar section containing nested folders, filed conversations, and loose Quick Access conversations. Folders are locations inside Quick Access, not a separate user-facing system.
 - A consistent capped indentation system: root folders and root chats share the first level beneath Quick Access, while every nested folder/chat advances one level without changing text size.
 - A quieter section-style Quick Access header with right-facing collapsed chevrons and downward-facing expanded chevrons.
 - Wider flexible item-name regions with hidden action controls removed from normal row flow.
-- Fade-based Compact overflow with hover reveal, plus a bounded two-line Full mode for long folder and conversation names.
+- Fade-based Compact overflow with a delayed, unobscured full-title hover reveal, plus a bounded two-line Full mode for long folder and conversation names.
+- Literal conversation titles are preserved, including titles containing words such as `Pinned` or `OpenAI Pin`; native Pin metadata is excluded only through DOM structure, never title-string guesses.
+- Existing Quick Access and folder title metadata refreshes now prefer rendered visible row text, reject blank or conflicting transitional snapshots, and use render generations that keep repository feedback from re-ingesting stale DOM titles.
 - The supplied settings gear geometry rendered through a local `currentColor` mask for light/dark theme compatibility.
 - One Wolf-owned sidebar block keeps **Wolf Expansion settings** above **Quick Access**, and places both immediately before ChatGPT's complete native Pinned section. Quick Access expansion remains independently owned by `wolfExpansion.quickAccessUiState`.
 - Coordinated membership behavior: assigning any native conversation to a folder automatically adds it to Quick Access; moving it to the root preserves Quick Access; removing it from Quick Access also removes its folder assignment.
@@ -96,6 +98,8 @@ Open settings directly from the **Wolf Expansion** settings entry in ChatGPT's s
 7. Drag over folders and insertion boundaries; confirm only the current folder highlight or insertion line appears and no blank gaps remain afterward.
 8. Disable Folders and confirm all starred chats appear flat at the root; re-enable it and confirm stored locations return. Disable Quick Access and confirm the entire Wolf organization UI hides without data loss.
 9. Recheck folder creation/rename protection, folders-before-chats ordering, cycle prevention, both conversation-menu contexts, native Pin independence, and persistence after reload.
+10. Rename both a root Quick Access chat and a foldered chat in ChatGPT without reloading. Confirm the title updates in place, membership/order remain unchanged, and Compact/Full overflow presentation follows the new title.
+11. Rename a conversation to `Pinned: Test Chat` and confirm Wolf Expansion preserves that title literally in the row, tooltip, and accessible label.
 
 Folder metadata lives in extension `storage.local`. Clearing ordinary ChatGPT site data or browser cache is not intended to remove it; explicitly clearing extension data or uninstalling the extension can.
 
@@ -140,8 +144,8 @@ Current storage keys are:
 - Row integration first targets native Pin/menu controls and then falls back to a smaller unambiguous row-owned sibling slot. It never uses fixed screen coordinates or overlays native controls.
 - Menu integration requires either an exact sidebar-row opener identity or an overflow-style current-conversation opener on a real `/c/<id>` page. Other ChatGPT menus remain untouched.
 - A conversation deleted on ChatGPT remains in local Quick Access/folder metadata because absence from the visible sidebar is not proof of deletion. Opening it may lead to ChatGPT's missing-conversation page; it can still be removed locally.
-- Conversation titles update only from links ChatGPT currently exposes in the native sidebar.
-- The dev.8.1 settings gear, fade clipping, reclaimed title width, bounded Full mode, and existing drag/drop integrations require signed-in Firefox/Floorp live verification.
+- Conversation titles update only from links ChatGPT currently exposes in the native sidebar. Conflicting duplicate snapshots for one conversation ID are ignored until ChatGPT exposes a stable title.
+- The dev.8.2 same-session title refresh, settings gear, fade clipping, reclaimed title width, bounded Full mode, and existing drag/drop integrations require signed-in Firefox/Floorp live verification.
 - This milestone assigns each conversation to at most one folder. Folder references do not hide or move ChatGPT's native Recent-chat row.
 
 ## License

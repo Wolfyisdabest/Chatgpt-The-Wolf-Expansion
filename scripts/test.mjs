@@ -17,6 +17,7 @@ const tests = [
   "tests/menuContext.test.ts",
   "tests/quickAccess.test.ts",
   "tests/quickAccessMembership.test.ts",
+  "tests/refreshGeneration.test.ts",
   "tests/settings.test.ts",
   "tests/settingsIcon.test.ts",
   "tests/sidebarPlacement.test.ts",

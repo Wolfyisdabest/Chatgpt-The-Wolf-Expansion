@@ -337,6 +337,7 @@ export class FoldersRepository {
         });
         if (
           normalized.ok &&
+          normalized.titleResolved &&
           (membership.title !== normalized.conversation.title ||
             membership.url !== normalized.conversation.url)
         ) {

@@ -24,6 +24,16 @@ export interface OverflowRevealMetrics {
   durationSeconds: number;
 }
 
+export type ItemNameRevealPhase = "idle" | "revealing" | "returning";
+
+export interface ItemNameRevealPresentation {
+  fadeVisible: boolean;
+  translatePixels: number;
+}
+
+export const ITEM_NAME_REVEAL_DELAY_MS = 450;
+export const ITEM_NAME_RESET_DURATION_MS = 180;
+
 export function getItemNamePresentation(
   mode: ItemNameDisplayMode,
 ): ItemNamePresentation {
@@ -70,12 +80,39 @@ export function getOverflowRevealMetrics(
   clientWidth: number,
   reducedMotion: boolean,
 ): OverflowRevealMetrics | null {
-  const distancePixels = Math.ceil(scrollWidth - clientWidth);
+  const distancePixels = scrollWidth - clientWidth;
   if (reducedMotion || distancePixels <= 1 || clientWidth <= 0) {
     return null;
   }
   return {
     distancePixels,
     durationSeconds: Math.min(12, Math.max(2.5, distancePixels / 32)),
+  };
+}
+
+export function getUnobscuredItemNameWidth(
+  clientWidth: number,
+  inlineEndOcclusion: number,
+): number {
+  return Math.max(0, clientWidth - Math.max(0, inlineEndOcclusion));
+}
+
+export function getItemNameRevealPresentation(
+  scrollWidth: number,
+  clientWidth: number,
+  reducedMotion: boolean,
+  phase: ItemNameRevealPhase,
+): ItemNameRevealPresentation {
+  const overflowState = getItemNameOverflowState(
+    scrollWidth,
+    clientWidth,
+    reducedMotion,
+  );
+  const effectivePhase = overflowState.revealMetrics ? phase : "idle";
+  return {
+    fadeVisible: overflowState.overflowing && effectivePhase === "idle",
+    translatePixels: effectivePhase === "revealing"
+      ? overflowState.revealMetrics?.distancePixels ?? 0
+      : 0,
   };
 }

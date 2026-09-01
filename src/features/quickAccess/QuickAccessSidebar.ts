@@ -24,8 +24,11 @@ import {
 } from "./folderNameEditorState";
 import { ExclusiveDragIndicator } from "./dragIndicatorState";
 import {
+  ITEM_NAME_RESET_DURATION_MS,
+  ITEM_NAME_REVEAL_DELAY_MS,
   getItemNameOverflowState,
   getItemNameSemantics,
+  getUnobscuredItemNameWidth,
 } from "./itemNameDisplay";
 import {
   getChevronPresentation,
@@ -961,13 +964,40 @@ export class QuickAccessSidebar {
     text.className = "wolf-item-name-text";
     text.textContent = value;
     viewport.append(text);
+    let revealTimeoutId: number | undefined;
+    let resetTimeoutId: number | undefined;
+    let pointerInside = false;
+
+    const clearRevealTimeout = (): void => {
+      if (revealTimeoutId !== undefined) {
+        window.clearTimeout(revealTimeoutId);
+        revealTimeoutId = undefined;
+      }
+    };
+    const clearResetTimeout = (): void => {
+      if (resetTimeoutId !== undefined) {
+        window.clearTimeout(resetTimeoutId);
+        resetTimeoutId = undefined;
+      }
+    };
+    const clearRevealGeometry = (): void => {
+      text.style.removeProperty("--wolf-name-scroll-distance");
+      text.style.removeProperty("--wolf-name-scroll-duration");
+      text.style.removeProperty("--wolf-name-reset-duration");
+    };
+
     viewport.addEventListener("pointerenter", () => {
+      pointerInside = true;
+      clearRevealTimeout();
+      clearResetTimeout();
+      delete viewport.dataset.revealReturning;
       if (this.settings?.favorites.itemNameDisplay !== "compact") {
         return;
       }
+      const availableWidth = this.getItemNameRevealWidth(viewport);
       const overflowState = getItemNameOverflowState(
         text.scrollWidth,
-        viewport.clientWidth,
+        availableWidth,
         window.matchMedia("(prefers-reduced-motion: reduce)").matches,
       );
       if (overflowState.overflowing) {
@@ -978,11 +1008,10 @@ export class QuickAccessSidebar {
       const metrics = overflowState.revealMetrics;
       if (!metrics) {
         delete viewport.dataset.revealActive;
-        text.style.removeProperty("--wolf-name-scroll-distance");
-        text.style.removeProperty("--wolf-name-scroll-duration");
+        delete viewport.dataset.revealReturning;
+        clearRevealGeometry();
         return;
       }
-      viewport.dataset.revealActive = "true";
       text.style.setProperty(
         "--wolf-name-scroll-distance",
         `${metrics.distancePixels}px`,
@@ -991,13 +1020,53 @@ export class QuickAccessSidebar {
         "--wolf-name-scroll-duration",
         `${metrics.durationSeconds}s`,
       );
+      revealTimeoutId = window.setTimeout(() => {
+        revealTimeoutId = undefined;
+        if (!pointerInside || !viewport.isConnected) {
+          return;
+        }
+        viewport.dataset.revealActive = "true";
+      }, ITEM_NAME_REVEAL_DELAY_MS);
     });
     viewport.addEventListener("pointerleave", () => {
-      delete viewport.dataset.revealActive;
-      text.style.removeProperty("--wolf-name-scroll-distance");
-      text.style.removeProperty("--wolf-name-scroll-duration");
+      pointerInside = false;
+      clearRevealTimeout();
+      clearResetTimeout();
+      if (viewport.dataset.revealActive === "true") {
+        delete viewport.dataset.revealActive;
+        viewport.dataset.revealReturning = "true";
+        text.style.setProperty(
+          "--wolf-name-reset-duration",
+          `${ITEM_NAME_RESET_DURATION_MS}ms`,
+        );
+        resetTimeoutId = window.setTimeout(() => {
+          resetTimeoutId = undefined;
+          delete viewport.dataset.revealReturning;
+          clearRevealGeometry();
+        }, ITEM_NAME_RESET_DURATION_MS);
+        return;
+      }
+      delete viewport.dataset.revealReturning;
+      clearRevealGeometry();
     });
     return viewport;
+  }
+
+  private getItemNameRevealWidth(viewport: HTMLElement): number {
+    const row = viewport.closest<HTMLElement>(
+      ".wolf-quick-access-folder-row, .wolf-quick-access-chat",
+    );
+    const controls = row?.querySelector<HTMLElement>(".wolf-quick-access-controls") ?? null;
+    if (!controls) {
+      return viewport.clientWidth;
+    }
+    const viewportRect = viewport.getBoundingClientRect();
+    const controlsRect = controls.getBoundingClientRect();
+    const direction = window.getComputedStyle(viewport).direction;
+    const inlineEndOcclusion = direction === "rtl"
+      ? Math.max(0, controlsRect.right - viewportRect.left)
+      : Math.max(0, viewportRect.right - controlsRect.left);
+    return getUnobscuredItemNameWidth(viewport.clientWidth, inlineEndOcclusion);
   }
 
   private createNameEditor(

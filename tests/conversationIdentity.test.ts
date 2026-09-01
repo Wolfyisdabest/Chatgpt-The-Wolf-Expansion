@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  collectDetectedConversationMetadata,
   normalizeConversationIdentity,
-  sanitizeConversationTitle,
+  normalizeConversationTitle,
+  selectConversationTitle,
+  selectConversationTitleWithSource,
 } from "../src/adapters/chatgpt/conversationIdentity";
 
 test("normalizes sidebar and top-right inputs to the same plain identity shape", () => {
@@ -80,10 +83,81 @@ test("uses a safe title fallback without changing conversation identity", () => 
   );
 });
 
-test("removes only native Pinned presentation annotations from conversation titles", () => {
-  assert.equal(sanitizeConversationTitle("Pinned: Wolf Images"), "Wolf Images");
-  assert.equal(sanitizeConversationTitle("Wolf Images — Pinned"), "Wolf Images");
-  assert.equal(sanitizeConversationTitle("Wolf Images (Pinned)"), "Wolf Images");
-  assert.equal(sanitizeConversationTitle("Wolf Images [OpenAI Pin]"), "Wolf Images");
-  assert.equal(sanitizeConversationTitle("How to keep a window pinned"), "How to keep a window pinned");
+test("preserves literal conversation titles that mention Pinned or OpenAI Pin", () => {
+  const literalTitles = [
+    "Pinned: Test Chat",
+    "Test Chat (Pinned)",
+    "Something — Pinned",
+    "Test Chat [Pinned]",
+    "OpenAI Pin",
+    "Pinned",
+    "My (Pinned) Notes",
+    "Pinned:",
+  ];
+
+  for (const title of literalTitles) {
+    assert.equal(normalizeConversationTitle(title), title);
+  }
+});
+
+test("normalizes only extraction whitespace without interpreting title content", () => {
+  assert.equal(
+    normalizeConversationTitle("  Pinned:\n  Test\tChat  "),
+    "Pinned: Test Chat",
+  );
+});
+
+test("prefers current visible row text over stale title attributes", () => {
+  assert.equal(selectConversationTitle({
+    visibleText: "New live title",
+    ariaLabel: "Old aria title",
+    titleAttribute: "Old title attribute",
+  }), "New live title");
+  assert.equal(selectConversationTitle({
+    visibleText: "   ",
+    ariaLabel: "Accessible fallback",
+    titleAttribute: "Tooltip fallback",
+  }), "Accessible fallback");
+  assert.deepEqual(selectConversationTitleWithSource({
+    visibleText: "",
+    textContentFallback: "Hidden or detached fallback",
+    ariaLabel: "Stale accessible title",
+  }), {
+    source: "text-content-fallback",
+    title: "Hidden or detached fallback",
+  });
+});
+
+test("detected metadata rejects unresolved and conflicting transitional titles", () => {
+  const detected = collectDetectedConversationMetadata([
+    {
+      conversationId: "stable",
+      title: "Stable title",
+      url: "/c/stable",
+      titleResolved: true,
+    },
+    {
+      conversationId: "blank",
+      title: "Untitled conversation",
+      url: "/c/blank",
+      titleResolved: false,
+    },
+    {
+      conversationId: "renaming",
+      title: "Old title",
+      url: "/c/renaming",
+      titleResolved: true,
+    },
+    {
+      conversationId: "renaming",
+      title: "New title",
+      url: "/c/renaming",
+      titleResolved: true,
+    },
+  ]);
+
+  assert.deepEqual([...detected.entries()], [[
+    "stable",
+    { title: "Stable title", url: "https://chatgpt.com/c/stable" },
+  ]]);
 });

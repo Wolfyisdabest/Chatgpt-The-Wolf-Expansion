@@ -2,6 +2,7 @@ import type {
   ChatGPTAdapter,
   ConversationReference,
 } from "../../adapters/chatgpt/ChatGPTAdapter";
+import { collectDetectedConversationMetadata } from "../../adapters/chatgpt/conversationIdentity";
 import type { Logger } from "../../core/logger";
 import { debounce } from "../../shared/events";
 import type { Feature, Unsubscribe } from "../../shared/types";
@@ -126,12 +127,7 @@ export class FoldersFeature implements Feature {
       const conversations = this.adapter.findConversationLinks()
         .map((link) => this.adapter.getConversationReference(link))
         .filter((conversation): conversation is ConversationReference => conversation !== null);
-      const detectedTitles = new Map(
-        conversations.map((conversation) => [
-          conversation.conversationId,
-          { title: conversation.title, url: conversation.url },
-        ]),
-      );
+      const detectedTitles = collectDetectedConversationMetadata(conversations);
       await this.repository.updateDetectedTitles(detectedTitles);
       const tree = this.applyTransientCollapse(await this.repository.getTree());
       this.sidebar.render(tree, this.settings, this.sectionCollapsed);

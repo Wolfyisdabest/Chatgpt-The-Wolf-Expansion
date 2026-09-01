@@ -1,6 +1,7 @@
 import type { Unsubscribe } from "../../shared/types";
 import { TypedEvent } from "../../shared/events";
 import type { Logger } from "../../core/logger";
+import { normalizeConversationIdentity } from "../../adapters/chatgpt/conversationIdentity";
 import { normalizeFavorites, normalizeUiState } from "../../storage/migrations";
 import {
   STORAGE_KEYS,
@@ -149,9 +150,22 @@ export class FavoritesRepository {
       const favorites = await this.list();
       for (const favorite of favorites) {
         const detected = detectedTitles.get(favorite.conversationId);
-        if (detected && (favorite.title !== detected.title || favorite.url !== detected.url)) {
-          favorite.title = detected.title;
-          favorite.url = detected.url;
+        if (!detected) {
+          continue;
+        }
+        const normalized = normalizeConversationIdentity({
+          conversationId: favorite.conversationId,
+          title: detected.title,
+          url: detected.url,
+        });
+        if (
+          normalized.ok &&
+          normalized.titleResolved &&
+          (favorite.title !== normalized.conversation.title ||
+            favorite.url !== normalized.conversation.url)
+        ) {
+          favorite.title = normalized.conversation.title;
+          favorite.url = normalized.conversation.url;
           changed = true;
         }
       }

@@ -4,7 +4,9 @@ import type { Unsubscribe } from "../../shared/types";
 import { createConversationUrl, parseConversationId } from "./conversationUrl";
 import {
   normalizeConversationIdentity,
-  sanitizeConversationTitle,
+  normalizeConversationTitle,
+  selectConversationTitleWithSource,
+  type ConversationTitleSource,
 } from "./conversationIdentity";
 import {
   TransientMenuTargetStore,
@@ -25,6 +27,17 @@ export interface ConversationIdentity {
 
 export interface ConversationReference extends ConversationIdentity {
   link: HTMLAnchorElement;
+  titleDiagnostics: ConversationTitleDiagnostics;
+  titleResolved: boolean;
+}
+
+export interface ConversationTitleDiagnostics {
+  ariaLabel: string;
+  normalizedTitle: string;
+  selectedSource: ConversationTitleSource;
+  textContentFallback: string;
+  titleAttribute: string;
+  visibleText: string;
 }
 
 export interface SidebarInsertionTarget {
@@ -54,6 +67,7 @@ export interface ChatGPTAdapter {
   getCurrentConversationId(): string | null;
   getCurrentConversationIdentity(): ConversationIdentity | null;
   getConversationTitle(element: HTMLElement): string | null;
+  getConversationTitleDiagnostics(element: HTMLElement): ConversationTitleDiagnostics;
   getConversationReference(link: HTMLAnchorElement): ConversationReference | null;
   resolveConversationFromActionElement(element: Element): ConversationReference | null;
   findConversationActionInsertionTarget(
@@ -230,29 +244,34 @@ export class DefaultChatGPTAdapter implements ChatGPTAdapter {
   }
 
   public getConversationTitle(element: HTMLElement): string | null {
-    const labelledTitle = sanitizeConversationTitle(element.getAttribute("aria-label"));
-    if (labelledTitle) {
-      return labelledTitle;
-    }
+    return this.getConversationTitleDiagnostics(element).normalizedTitle || null;
+  }
 
-    const explicitTitle = sanitizeConversationTitle(element.getAttribute("title"));
-    if (explicitTitle) {
-      return explicitTitle;
-    }
-
+  public getConversationTitleDiagnostics(element: HTMLElement): ConversationTitleDiagnostics {
     const titleSource = element.cloneNode(true);
     if (titleSource instanceof HTMLElement) {
       titleSource.querySelectorAll(`[${WOLF_ATTRIBUTE}]`).forEach((wolfElement) => {
         wolfElement.remove();
       });
-      titleSource.querySelectorAll(CHATGPT_SELECTORS.button).forEach((nativeAction) => {
-        nativeAction.remove();
-      });
     }
-    const text = sanitizeConversationTitle(
-      titleSource.textContent?.replace(/\s+/gu, " "),
-    );
-    return text || null;
+    const visibleText = normalizeConversationTitle(element.innerText);
+    const textContentFallback = normalizeConversationTitle(titleSource.textContent);
+    const ariaLabel = normalizeConversationTitle(element.getAttribute("aria-label"));
+    const titleAttribute = normalizeConversationTitle(element.getAttribute("title"));
+    const selected = selectConversationTitleWithSource({
+      visibleText,
+      textContentFallback,
+      ariaLabel,
+      titleAttribute,
+    });
+    return {
+      ariaLabel,
+      normalizedTitle: selected.title,
+      selectedSource: selected.source,
+      textContentFallback,
+      titleAttribute,
+      visibleText,
+    };
   }
 
   public getConversationReference(link: HTMLAnchorElement): ConversationReference | null {
@@ -261,9 +280,10 @@ export class DefaultChatGPTAdapter implements ChatGPTAdapter {
       return null;
     }
 
+    const titleDiagnostics = this.getConversationTitleDiagnostics(link);
     const normalized = normalizeConversationIdentity({
       conversationId,
-      title: this.getConversationTitle(link),
+      title: titleDiagnostics.normalizedTitle,
       url: link.href,
     });
     if (!normalized.ok) {
@@ -277,6 +297,9 @@ export class DefaultChatGPTAdapter implements ChatGPTAdapter {
     return {
       ...normalized.conversation,
       link,
+      titleDiagnostics,
+      titleResolved: normalized.titleResolved &&
+        titleDiagnostics.selectedSource === "visible-text",
     };
   }
 
@@ -715,9 +738,10 @@ export class DefaultChatGPTAdapter implements ChatGPTAdapter {
         this.logger.debug("Favorite target: conversation ID parsed.", conversationId);
       }
 
+      const titleDiagnostics = this.getConversationTitleDiagnostics(link);
       const normalized = normalizeConversationIdentity({
         conversationId,
-        title: this.getConversationTitle(link),
+        title: titleDiagnostics.normalizedTitle,
         url: link.href,
       });
       if (!normalized.ok) {
@@ -735,6 +759,9 @@ export class DefaultChatGPTAdapter implements ChatGPTAdapter {
       return {
         ...normalized.conversation,
         link,
+        titleDiagnostics,
+        titleResolved: normalized.titleResolved &&
+          titleDiagnostics.selectedSource === "visible-text",
       };
     }
 

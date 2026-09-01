@@ -269,30 +269,42 @@
 }
 
 [data-wolf-expansion="quick-access-section"][data-item-name-display="compact"]
-  .wolf-item-name-viewport[data-reveal-active="true"]:hover {
-  -webkit-mask-image: linear-gradient(
-    to right,
-    transparent 0,
-    #000 0.45rem,
-    #000 calc(100% - 0.65rem),
-    transparent 100%
-  );
-  mask-image: linear-gradient(
-    to right,
-    transparent 0,
-    #000 0.45rem,
-    #000 calc(100% - 0.65rem),
-    transparent 100%
-  );
+  .wolf-item-name-viewport:is(
+    [data-reveal-active="true"],
+    [data-reveal-returning="true"]
+  ) {
+  -webkit-mask-image: none;
+  mask-image: none;
 }
 
 [data-wolf-expansion="quick-access-section"][data-item-name-display="compact"]
   .wolf-item-name-viewport[data-reveal-active="true"]:hover
   .wolf-item-name-text {
-  animation: wolf-item-name-reveal var(--wolf-name-scroll-duration, 3s) ease-in-out 450ms 1 forwards;
   max-width: none;
   overflow: visible;
+  transform: translateX(calc(-1 * var(--wolf-name-scroll-distance, 0px)));
+  transition-duration: var(--wolf-name-scroll-duration, 3s);
+  transition-timing-function: ease-in-out;
   width: max-content;
+}
+
+[data-wolf-expansion="quick-access-section"][data-item-name-display="compact"]
+  .wolf-item-name-viewport[data-reveal-returning="true"]
+  .wolf-item-name-text {
+  transform: translateX(0);
+  transition-duration: var(--wolf-name-reset-duration, 180ms);
+  transition-timing-function: ease-out;
+}
+
+[data-wolf-expansion="quick-access-section"][data-item-name-display="compact"]
+  :is(.wolf-quick-access-folder-row, .wolf-quick-access-chat):has(
+    .wolf-item-name-viewport:is(
+      [data-reveal-active="true"],
+      [data-reveal-returning="true"]
+    )
+  )
+  .wolf-quick-access-controls {
+  box-shadow: none;
 }
 
 [data-wolf-expansion="quick-access-section"][data-item-name-display="full"]
@@ -359,16 +371,6 @@
   .wolf-quick-access-controls {
   top: 0.2rem;
   transform: none;
-}
-
-@keyframes wolf-item-name-reveal {
-  0%, 10% {
-    transform: translateX(0);
-  }
-
-  85%, 100% {
-    transform: translateX(calc(-1 * var(--wolf-name-scroll-distance, 0px)));
-  }
 }
 
 .wolf-row-actions {

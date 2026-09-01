@@ -2,7 +2,10 @@ import type {
   ChatGPTAdapter,
   ConversationReference,
 } from "../../adapters/chatgpt/ChatGPTAdapter";
-import { normalizeConversationIdentity } from "../../adapters/chatgpt/conversationIdentity";
+import {
+  collectDetectedConversationMetadata,
+  normalizeConversationIdentity,
+} from "../../adapters/chatgpt/conversationIdentity";
 import type { Logger } from "../../core/logger";
 import type { WolfSidebarRoot } from "../../core/WolfSidebarRoot";
 import { debounce } from "../../shared/events";
@@ -15,6 +18,11 @@ import { QuickAccessMembershipService } from "./QuickAccessMembershipService";
 import { buildQuickAccessProjection } from "./quickAccessProjection";
 import { QuickAccessSidebar } from "./QuickAccessSidebar";
 import { QuickAccessUiStateRepository } from "./QuickAccessUiStateRepository";
+import {
+  QuickAccessRefreshCoordinator,
+  type QuickAccessRefreshReason,
+  type QuickAccessRefreshWork,
+} from "./refreshGeneration";
 
 export class QuickAccessFeature implements Feature {
   public readonly id = "quick-access";
@@ -26,8 +34,11 @@ export class QuickAccessFeature implements Feature {
   private readonly transientFolderCollapse = new Map<string, boolean>();
   private readonly sidebar: QuickAccessSidebar;
   private readonly menuIntegration: QuickAccessMenuIntegration;
-  private readonly scheduleRefresh: () => void;
+  private readonly scheduleRepositoryRefresh: () => void;
+  private readonly scheduleSidebarRefresh: () => void;
   private readonly membershipService: QuickAccessMembershipService;
+  private readonly refreshCoordinator = new QuickAccessRefreshCoordinator();
+  private refreshInFlight: Promise<void> | null = null;
 
   public constructor(
     private readonly adapter: ChatGPTAdapter,
@@ -37,7 +48,8 @@ export class QuickAccessFeature implements Feature {
     sidebarRoot: WolfSidebarRoot,
     private readonly logger: Logger,
   ) {
-    this.scheduleRefresh = debounce(() => void this.refresh(), 100);
+    this.scheduleSidebarRefresh = debounce(() => void this.refresh("sidebar"), 160);
+    this.scheduleRepositoryRefresh = debounce(() => void this.refresh("repository"), 40);
     this.membershipService = new QuickAccessMembershipService(
       favoritesRepository,
       foldersRepository,
@@ -51,7 +63,7 @@ export class QuickAccessFeature implements Feature {
           if (this.settings?.favorites.rememberCollapsed) {
             await this.uiStateRepository.save({ collapsed });
           }
-          await this.refresh();
+          await this.refresh("explicit");
         },
         onToggleQuickAccess: async (conversation) => {
           return this.membershipService.toggle(conversation);
@@ -65,7 +77,7 @@ export class QuickAccessFeature implements Feature {
             await this.foldersRepository.setFolderCollapsed(folderId, collapsed);
           } else {
             this.transientFolderCollapse.set(folderId, collapsed);
-            await this.refresh();
+            await this.refresh("explicit");
           }
         },
         onCreateFolder: (name, parentId) =>
@@ -130,7 +142,7 @@ export class QuickAccessFeature implements Feature {
       this.transientFolderCollapse.clear();
     }
     if (this.enabled) {
-      await this.refresh();
+      await this.refresh("explicit");
     }
   }
 
@@ -142,13 +154,13 @@ export class QuickAccessFeature implements Feature {
     const uiState = await this.uiStateRepository.get();
     this.collapsed = this.settings?.favorites.rememberCollapsed ? uiState.collapsed : false;
     this.unsubscribers.push(
-      this.adapter.watchSidebar(this.scheduleRefresh),
-      this.adapter.watchNavigation(this.scheduleRefresh),
-      this.favoritesRepository.subscribe(this.scheduleRefresh),
-      this.foldersRepository.subscribe(this.scheduleRefresh),
+      this.adapter.watchSidebar(this.scheduleSidebarRefresh),
+      this.adapter.watchNavigation(this.scheduleSidebarRefresh),
+      this.favoritesRepository.subscribe(this.scheduleRepositoryRefresh),
+      this.foldersRepository.subscribe(this.scheduleRepositoryRefresh),
     );
     this.menuIntegration.enable();
-    await this.refresh();
+    await this.refresh("explicit");
     this.logger.debug("Quick Access enabled.");
   }
 
@@ -157,6 +169,7 @@ export class QuickAccessFeature implements Feature {
       return;
     }
     this.enabled = false;
+    this.refreshCoordinator.reset();
     while (this.unsubscribers.length > 0) {
       this.unsubscribers.pop()?.();
     }
@@ -169,7 +182,33 @@ export class QuickAccessFeature implements Feature {
     this.disable();
   }
 
-  private async refresh(): Promise<void> {
+  private async refresh(reason: QuickAccessRefreshReason): Promise<void> {
+    this.refreshCoordinator.request(reason);
+    if (this.refreshInFlight) {
+      await this.refreshInFlight;
+      return;
+    }
+
+    const refreshOperation = this.runRefreshLoop();
+    this.refreshInFlight = refreshOperation;
+    try {
+      await refreshOperation;
+    } finally {
+      if (this.refreshInFlight === refreshOperation) {
+        this.refreshInFlight = null;
+      }
+    }
+  }
+
+  private async runRefreshLoop(): Promise<void> {
+    let work = this.refreshCoordinator.takeNext();
+    while (this.enabled && work) {
+      await this.refreshOnce(work);
+      work = this.refreshCoordinator.takeNext();
+    }
+  }
+
+  private async refreshOnce(work: QuickAccessRefreshWork): Promise<void> {
     const settings = this.settings;
     if (!this.enabled || !settings) {
       return;
@@ -182,18 +221,20 @@ export class QuickAccessFeature implements Feature {
       const references = this.adapter.findConversationLinks()
         .map((link) => this.adapter.getConversationReference(link))
         .filter((reference): reference is ConversationReference => reference !== null);
-      const detected = new Map(
-        references.map((reference) => [
-          reference.conversationId,
-          { title: reference.title, url: reference.url },
-        ]),
-      );
-      await Promise.all([
-        this.favoritesRepository.updateDetectedTitles(detected),
-        settings.folders.enabled
-          ? this.foldersRepository.updateDetectedTitles(detected)
-          : Promise.resolve(false),
-      ]);
+      const detected = work.ingestDetectedTitles
+        ? collectDetectedConversationMetadata(references)
+        : new Map<string, { title: string; url: string }>();
+      const diagnosticConversationIds = work.ingestDetectedTitles
+        ? await this.logDetectedTitleDiagnostics(references, detected, settings)
+        : new Set<string>();
+      if (work.ingestDetectedTitles) {
+        await Promise.all([
+          this.favoritesRepository.updateDetectedTitles(detected),
+          settings.folders.enabled
+            ? this.foldersRepository.updateDetectedTitles(detected)
+            : Promise.resolve(false),
+        ]);
+      }
       const [favorites, folders, memberships] = await Promise.all([
         this.favoritesRepository.list(),
         settings.folders.enabled ? this.foldersRepository.listFolders() : Promise.resolve([]),
@@ -213,6 +254,12 @@ export class QuickAccessFeature implements Feature {
       const currentIsQuickAccess = currentId
         ? favorites.some((favorite) => favorite.conversationId === currentId)
         : false;
+      if (!this.enabled || !this.refreshCoordinator.isLatest(work.generation)) {
+        this.logger.debug("Quick Access render deferred for a newer refresh generation.", {
+          generation: work.generation,
+        });
+        return;
+      }
       this.sidebar.render(projection, settings, this.collapsed, currentIsQuickAccess);
       this.sidebar.syncNativeRows(
         references,
@@ -220,8 +267,106 @@ export class QuickAccessFeature implements Feature {
         settings.favorites.showIcon,
         settings.folders.enabled,
       );
+      this.logProjectedTitleDiagnostics(
+        diagnosticConversationIds,
+        favorites,
+        memberships,
+        projection,
+      );
     } catch (error) {
       this.logger.warn("Quick Access could not refresh; stored organization was untouched.", error);
     }
   }
+
+  private async logDetectedTitleDiagnostics(
+    references: readonly ConversationReference[],
+    detected: ReadonlyMap<string, { title: string; url: string }>,
+    settings: WolfExpansionSettings,
+  ): Promise<Set<string>> {
+    if (!settings.debug.enabled) {
+      return new Set();
+    }
+    const [favorites, memberships] = await Promise.all([
+      this.favoritesRepository.list(),
+      settings.folders.enabled
+        ? this.foldersRepository.listMembership()
+        : Promise.resolve([]),
+    ]);
+    const favoriteTitles = new Map(
+      favorites.map((favorite) => [favorite.conversationId, favorite.title]),
+    );
+    const membershipTitles = new Map(
+      memberships.map((membership) => [membership.conversationId, membership.title]),
+    );
+    const changedIds = new Set<string>();
+    for (const reference of references) {
+      const favoriteTitle = favoriteTitles.get(reference.conversationId);
+      const membershipTitle = membershipTitles.get(reference.conversationId);
+      if (
+        (favoriteTitle === undefined && membershipTitle === undefined) ||
+        (reference.title === favoriteTitle &&
+          (membershipTitle === undefined || reference.title === membershipTitle))
+      ) {
+        continue;
+      }
+      changedIds.add(reference.conversationId);
+      this.logger.debug("Live title extraction candidate.", {
+        conversationId: reference.conversationId,
+        visibleText: reference.titleDiagnostics.visibleText,
+        textContentFallback: reference.titleDiagnostics.textContentFallback,
+        ariaLabel: reference.titleDiagnostics.ariaLabel,
+        titleAttribute: reference.titleDiagnostics.titleAttribute,
+        normalizedTitle: reference.titleDiagnostics.normalizedTitle,
+        selectedSource: reference.titleDiagnostics.selectedSource,
+        detectedTitle: detected.get(reference.conversationId)?.title ?? null,
+        storedFavoriteTitle: favoriteTitle ?? null,
+        storedFolderMembershipTitle: membershipTitle ?? null,
+      });
+    }
+    return changedIds;
+  }
+
+  private logProjectedTitleDiagnostics(
+    conversationIds: ReadonlySet<string>,
+    favorites: readonly { conversationId: string; title: string }[],
+    memberships: readonly { conversationId: string; title: string }[],
+    projection: ReturnType<typeof buildQuickAccessProjection>,
+  ): void {
+    if (conversationIds.size === 0) {
+      return;
+    }
+    const favoriteTitles = new Map(
+      favorites.map((favorite) => [favorite.conversationId, favorite.title]),
+    );
+    const membershipTitles = new Map(
+      memberships.map((membership) => [membership.conversationId, membership.title]),
+    );
+    const projectedTitles = collectProjectedTitles(projection);
+    for (const conversationId of conversationIds) {
+      this.logger.debug("Live title reconciliation completed.", {
+        conversationId,
+        storedFavoriteTitle: favoriteTitles.get(conversationId) ?? null,
+        storedFolderMembershipTitle: membershipTitles.get(conversationId) ?? null,
+        finalProjectionTitle: projectedTitles.get(conversationId) ?? null,
+      });
+    }
+  }
+}
+
+function collectProjectedTitles(
+  projection: ReturnType<typeof buildQuickAccessProjection>,
+): Map<string, string> {
+  const titles = new Map(
+    projection.looseChats.map((chat) => [chat.conversationId, chat.title]),
+  );
+  const visit = (folders: typeof projection.folders): void => {
+    for (const folder of folders) {
+      for (const chat of folder.chats) {
+        titles.set(chat.conversationId, chat.title);
+      }
+      visit(folder.folders);
+    }
+  };
+  visit(projection.folders);
+  return titles;
 }

@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeConversationIdentity } from "../src/adapters/chatgpt/conversationIdentity";
+import {
+  collectDetectedConversationMetadata,
+  normalizeConversationIdentity,
+  selectConversationTitleWithSource,
+} from "../src/adapters/chatgpt/conversationIdentity";
 import { getFavoriteActionLabel } from "../src/features/favorites/favoriteActionState";
 import { FavoritesRepository } from "../src/features/favorites/FavoritesRepository";
 import { FoldersRepository } from "../src/features/folders/FoldersRepository";
@@ -33,10 +37,10 @@ test("user-facing Favorites terminology maps to Quick Access without renaming st
   assert.equal(STORAGE_KEYS.favorites, "wolfExpansion.favorites");
 });
 
-test("native Pinned metadata never changes Quick Access text, accessibility source, or membership", () => {
+test("literal Pinned wording survives storage projection and accessibility semantics", () => {
   const favorite = {
     conversationId: "wolf-images",
-    title: "Wolf Images — Pinned",
+    title: "Pinned: Test Chat",
     url: "https://chatgpt.com/c/wolf-images",
     addedAt: 1,
     sortIndex: 0,
@@ -49,13 +53,139 @@ test("native Pinned metadata never changes Quick Access text, accessibility sour
   );
   const projected = projection.looseChats[0];
   const semantics = getItemNameSemantics(projected?.title ?? "");
-  assert.equal(projected?.title, "Wolf Images");
-  assert.equal(projected?.title.includes("Pinned"), false);
-  assert.equal(semantics.visibleText, "Wolf Images");
-  assert.equal(semantics.tooltip, "Wolf Images");
-  assert.equal(semantics.accessibleName, "Wolf Images");
+  assert.equal(projected?.title, "Pinned: Test Chat");
+  assert.equal(semantics.visibleText, "Pinned: Test Chat");
+  assert.equal(semantics.tooltip, "Pinned: Test Chat");
+  assert.equal(semantics.accessibleName, "Pinned: Test Chat");
   assert.equal(projected?.conversationId, favorite.conversationId);
   assert.equal(projected?.isQuickAccess, true);
+});
+
+test("existing metadata refresh updates root and foldered chats without changing identity or order", async () => {
+  const { favorites, folders } = repositories();
+  const folder = await folders.createFolder("Development");
+  await favorites.add(conversation("root-chat", "Root old"));
+  await favorites.add(conversation("folder-chat", "Folder old"));
+  await folders.assignConversation(folder.id, conversation("folder-chat", "Folder old"));
+  const originalFavoriteOrder = (await favorites.list()).map((item) => item.conversationId);
+  const originalMembership = await folders.getMembership("folder-chat");
+
+  for (const suffix of ["new", "newer"]) {
+    const detected = new Map([
+      ["root-chat", { title: `Root ${suffix}`, url: "https://chatgpt.com/c/root-chat" }],
+      ["folder-chat", { title: `Folder ${suffix}`, url: "https://chatgpt.com/c/folder-chat" }],
+    ]);
+    await Promise.all([
+      favorites.updateDetectedTitles(detected),
+      folders.updateDetectedTitles(detected),
+    ]);
+  }
+
+  const storedFavorites = await favorites.list();
+  const storedMembership = await folders.getMembership("folder-chat");
+  const projection = buildQuickAccessProjection(
+    storedFavorites,
+    await folders.listFolders(),
+    await folders.listMembership(),
+    { quickAccessEnabled: true, foldersEnabled: true },
+  );
+  assert.equal(projection.looseChats[0]?.title, "Root newer");
+  assert.equal(projection.folders[0]?.chats[0]?.title, "Folder newer");
+  assert.deepEqual(storedFavorites.map((item) => item.conversationId), originalFavoriteOrder);
+  assert.equal(storedMembership?.conversationId, originalMembership?.conversationId);
+  assert.equal(storedMembership?.folderId, originalMembership?.folderId);
+  assert.equal(storedMembership?.sortIndex, originalMembership?.sortIndex);
+});
+
+test("literal Pinned title survives discovery metadata through both repositories", async () => {
+  const { favorites, folders } = repositories();
+  const folder = await folders.createFolder("Folder");
+  await favorites.add(conversation("literal", "Old title"));
+  await folders.assignConversation(folder.id, conversation("literal", "Old title"));
+  const detected = new Map([
+    ["literal", {
+      title: "Pinned: Test Chat",
+      url: "https://chatgpt.com/c/literal",
+    }],
+  ]);
+
+  await Promise.all([
+    favorites.updateDetectedTitles(detected),
+    folders.updateDetectedTitles(detected),
+  ]);
+  const projection = buildQuickAccessProjection(
+    await favorites.list(),
+    await folders.listFolders(),
+    await folders.listMembership(),
+    { quickAccessEnabled: true, foldersEnabled: true },
+  );
+  assert.equal((await favorites.list())[0]?.title, "Pinned: Test Chat");
+  assert.equal((await folders.getMembership("literal"))?.title, "Pinned: Test Chat");
+  assert.equal(projection.folders[0]?.chats[0]?.title, "Pinned: Test Chat");
+});
+
+test("literal titles survive extraction through rendered Quick Access semantics", async () => {
+  const literalTitles = [
+    "Pinned: Test Chat",
+    "Test Chat (Pinned)",
+    "Something — Pinned",
+    "Pinned",
+    "Pinned:",
+    "My (Pinned) Notes",
+  ];
+
+  for (const [index, literalTitle] of literalTitles.entries()) {
+    const { favorites, folders } = repositories();
+    const folder = await folders.createFolder("Folder");
+    const conversationId = `literal-${index}`;
+    await favorites.add(conversation(conversationId, "Old title"));
+    await folders.assignConversation(folder.id, conversation(conversationId, "Old title"));
+    const extracted = selectConversationTitleWithSource({
+      visibleText: literalTitle,
+      ariaLabel: "Stale accessible title",
+      titleAttribute: "Stale tooltip title",
+    });
+    const detected = collectDetectedConversationMetadata([{
+      conversationId,
+      title: extracted.title,
+      titleResolved: true,
+      url: `/c/${conversationId}`,
+    }]);
+    await Promise.all([
+      favorites.updateDetectedTitles(detected),
+      folders.updateDetectedTitles(detected),
+    ]);
+    const projection = buildQuickAccessProjection(
+      await favorites.list(),
+      await folders.listFolders(),
+      await folders.listMembership(),
+      { quickAccessEnabled: true, foldersEnabled: true },
+    );
+    const rendered = getItemNameSemantics(projection.folders[0]?.chats[0]?.title ?? "");
+    assert.equal(extracted.source, "visible-text");
+    assert.equal((await favorites.list())[0]?.title, literalTitle);
+    assert.equal((await folders.getMembership(conversationId))?.title, literalTitle);
+    assert.deepEqual(rendered, {
+      accessibleName: literalTitle,
+      tooltip: literalTitle,
+      visibleText: literalTitle,
+    });
+  }
+});
+
+test("blank detected titles never overwrite stored display metadata", async () => {
+  const { favorites, folders } = repositories();
+  const folder = await folders.createFolder("Folder");
+  await favorites.add(conversation("stable", "Stable title"));
+  await folders.assignConversation(folder.id, conversation("stable", "Stable title"));
+  const blank = new Map([
+    ["stable", { title: "   ", url: "https://chatgpt.com/c/stable" }],
+  ]);
+
+  assert.equal(await favorites.updateDetectedTitles(blank), false);
+  assert.equal(await folders.updateDetectedTitles(blank), false);
+  assert.equal((await favorites.list())[0]?.title, "Stable title");
+  assert.equal((await folders.getMembership("stable"))?.title, "Stable title");
 });
 
 test("root and nested projections structurally keep folders above chats", async () => {

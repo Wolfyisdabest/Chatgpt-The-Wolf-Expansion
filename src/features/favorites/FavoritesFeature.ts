@@ -2,7 +2,10 @@ import type {
   ChatGPTAdapter,
   ConversationReference,
 } from "../../adapters/chatgpt/ChatGPTAdapter";
-import { normalizeConversationIdentity } from "../../adapters/chatgpt/conversationIdentity";
+import {
+  collectDetectedConversationMetadata,
+  normalizeConversationIdentity,
+} from "../../adapters/chatgpt/conversationIdentity";
 import type { Logger } from "../../core/logger";
 import { debounce } from "../../shared/events";
 import type { Feature, Unsubscribe } from "../../shared/types";
@@ -167,12 +170,7 @@ export class FavoritesFeature implements Feature {
         .map((link) => this.adapter.getConversationReference(link))
         .filter((conversation): conversation is ConversationReference => conversation !== null);
       this.logger.debug("Conversation rows discovered.", conversations.length);
-      const detectedTitles = new Map(
-        conversations.map((conversation) => [
-          conversation.conversationId,
-          { title: conversation.title, url: conversation.url },
-        ]),
-      );
+      const detectedTitles = collectDetectedConversationMetadata(conversations);
 
       await this.repository.updateDetectedTitles(detectedTitles);
       const favorites = await this.repository.list();
