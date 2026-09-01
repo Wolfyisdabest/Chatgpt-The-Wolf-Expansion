@@ -18,6 +18,19 @@ export type ConversationIdentityNormalizationResult =
 
 const FALLBACK_CONVERSATION_TITLE = "Untitled conversation";
 
+export function sanitizeConversationTitle(value: unknown): string {
+  if (typeof value !== "string") {
+    return "";
+  }
+
+  return value
+    .trim()
+    .replace(/^pinned\s*[:,]\s*/iu, "")
+    .replace(/\s*(?:[-–—]\s*pinned|\(\s*pinned\s*\)|\[\s*(?:openai\s*)?pin(?:ned)?\s*\])\s*$/iu, "")
+    .replace(/^pinned$/iu, "")
+    .trim();
+}
+
 export function normalizeConversationIdentity(
   input: ConversationIdentityInput,
 ): ConversationIdentityNormalizationResult {
@@ -35,7 +48,7 @@ export function normalizeConversationIdentity(
     return { ok: false, reason: "URL is missing, invalid, or belongs to another conversation" };
   }
 
-  const resolvedTitle = typeof input.title === "string" ? input.title.trim() : "";
+  const resolvedTitle = sanitizeConversationTitle(input.title);
   return {
     ok: true,
     conversation: {

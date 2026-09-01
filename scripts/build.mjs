@@ -15,6 +15,7 @@ const staticFiles = [
   ["assets/branding/icons/wolf-expansion-mark-48.png", "icons/wolf-expansion-mark-48.png"],
   ["assets/branding/icons/wolf-expansion-mark-96.png", "icons/wolf-expansion-mark-96.png"],
   ["assets/branding/icons/wolf-expansion-mark-128.png", "icons/wolf-expansion-mark-128.png"],
+  ["assets/icons/Settings/settings_currentcolor.svg", "icons/settings-gear.svg"],
 ];
 
 async function copyStaticFiles() {

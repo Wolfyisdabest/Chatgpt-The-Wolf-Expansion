@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { normalizeConversationIdentity } from "../src/adapters/chatgpt/conversationIdentity";
+import {
+  normalizeConversationIdentity,
+  sanitizeConversationTitle,
+} from "../src/adapters/chatgpt/conversationIdentity";
 
 test("normalizes sidebar and top-right inputs to the same plain identity shape", () => {
   const sidebarInput = {
@@ -75,4 +78,12 @@ test("uses a safe title fallback without changing conversation identity", () => 
       titleResolved: false,
     },
   );
+});
+
+test("removes only native Pinned presentation annotations from conversation titles", () => {
+  assert.equal(sanitizeConversationTitle("Pinned: Wolf Images"), "Wolf Images");
+  assert.equal(sanitizeConversationTitle("Wolf Images — Pinned"), "Wolf Images");
+  assert.equal(sanitizeConversationTitle("Wolf Images (Pinned)"), "Wolf Images");
+  assert.equal(sanitizeConversationTitle("Wolf Images [OpenAI Pin]"), "Wolf Images");
+  assert.equal(sanitizeConversationTitle("How to keep a window pinned"), "How to keep a window pinned");
 });

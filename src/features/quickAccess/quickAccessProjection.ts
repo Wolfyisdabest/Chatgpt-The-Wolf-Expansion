@@ -3,6 +3,7 @@ import type {
   FolderConversationMembership,
   FolderRecord,
 } from "../../storage/schemas";
+import { sanitizeConversationTitle } from "../../adapters/chatgpt/conversationIdentity";
 
 export interface QuickAccessChatView {
   conversationId: string;
@@ -56,7 +57,7 @@ export function buildQuickAccessProjection(
       .sort(compareBySortIndex)
       .map((favorite) => ({
         conversationId: favorite.conversationId,
-        title: favorite.title,
+        title: sanitizeConversationTitle(favorite.title) || "Untitled conversation",
         url: favorite.url,
         sortIndex: favorite.sortIndex,
         isQuickAccess: true,
@@ -82,7 +83,7 @@ export function buildQuickAccessProjection(
     }
     folder.chats.push({
       conversationId: membership.conversationId,
-      title: membership.title,
+      title: sanitizeConversationTitle(membership.title) || "Untitled conversation",
       url: membership.url,
       sortIndex: membership.sortIndex,
       isQuickAccess: true,

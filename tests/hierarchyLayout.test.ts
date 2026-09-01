@@ -42,6 +42,35 @@ test("nested depth never introduces depth-dependent font sizing", () => {
   assert.match(css, /\.wolf-quick-access-chat-link\s*\{[^}]*font:\s*inherit;/s);
 });
 
+test("hidden action controls do not reserve permanent row width", () => {
+  const css = readFileSync(
+    path.join(process.cwd(), "src/features/quickAccess/quick-access.css"),
+    "utf8",
+  );
+  assert.match(css, /\.wolf-quick-access-controls\s*\{[^}]*position:\s*absolute;/s);
+  assert.match(css, /\.wolf-item-name-viewport\s*\{[^}]*flex:\s*1;[^}]*min-width:\s*0;/s);
+});
+
+test("deep nesting retains the established visual indentation cap", () => {
+  const css = readFileSync(
+    path.join(process.cwd(), "src/features/quickAccess/quick-access.css"),
+    "utf8",
+  );
+  assert.match(css, /--wolf-max-indent:\s*5\.25rem;/);
+  assert.equal(getQuickAccessHierarchyLayout(100, "chat").visualDepth, 101);
+});
+
+test("Compact and Full CSS use fade clipping without ellipsis", () => {
+  const css = readFileSync(
+    path.join(process.cwd(), "src/features/quickAccess/quick-access.css"),
+    "utf8",
+  );
+  assert.match(css, /data-item-name-display="compact"[^}]*mask-image:/s);
+  assert.match(css, /-webkit-line-clamp:\s*2;/);
+  assert.match(css, /overflow-wrap:\s*anywhere;/);
+  assert.doesNotMatch(css, /text-overflow:\s*ellipsis;/);
+});
+
 test("compact overflow calculations remain scoped to the indented text viewport", () => {
   assert.deepEqual(getOverflowRevealMetrics(220, 84, false), {
     distancePixels: 136,

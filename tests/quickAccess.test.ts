@@ -8,6 +8,7 @@ import {
   buildQuickAccessProjection,
   getValidFolderDestinations,
 } from "../src/features/quickAccess/quickAccessProjection";
+import { getItemNameSemantics } from "../src/features/quickAccess/itemNameDisplay";
 import { migrateStorage } from "../src/storage/migrations";
 import { STORAGE_KEYS } from "../src/storage/schemas";
 import { MemoryStorage } from "./helpers/MemoryStorage";
@@ -30,6 +31,31 @@ test("user-facing Favorites terminology maps to Quick Access without renaming st
   assert.equal(getFavoriteActionLabel(false, "menu"), "Add to Quick Access");
   assert.equal(getFavoriteActionLabel(true, "menu"), "Remove from Quick Access");
   assert.equal(STORAGE_KEYS.favorites, "wolfExpansion.favorites");
+});
+
+test("native Pinned metadata never changes Quick Access text, accessibility source, or membership", () => {
+  const favorite = {
+    conversationId: "wolf-images",
+    title: "Wolf Images — Pinned",
+    url: "https://chatgpt.com/c/wolf-images",
+    addedAt: 1,
+    sortIndex: 0,
+  };
+  const projection = buildQuickAccessProjection(
+    [favorite],
+    [],
+    [],
+    { quickAccessEnabled: true, foldersEnabled: true },
+  );
+  const projected = projection.looseChats[0];
+  const semantics = getItemNameSemantics(projected?.title ?? "");
+  assert.equal(projected?.title, "Wolf Images");
+  assert.equal(projected?.title.includes("Pinned"), false);
+  assert.equal(semantics.visibleText, "Wolf Images");
+  assert.equal(semantics.tooltip, "Wolf Images");
+  assert.equal(semantics.accessibleName, "Wolf Images");
+  assert.equal(projected?.conversationId, favorite.conversationId);
+  assert.equal(projected?.isQuickAccess, true);
 });
 
 test("root and nested projections structurally keep folders above chats", async () => {

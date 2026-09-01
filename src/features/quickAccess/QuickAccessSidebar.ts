@@ -23,7 +23,10 @@ import {
   type FolderNameEditorState,
 } from "./folderNameEditorState";
 import { ExclusiveDragIndicator } from "./dragIndicatorState";
-import { getOverflowRevealMetrics } from "./itemNameDisplay";
+import {
+  getItemNameOverflowState,
+  getItemNameSemantics,
+} from "./itemNameDisplay";
 import {
   getChevronPresentation,
   getQuickAccessHierarchyLayout,
@@ -439,6 +442,7 @@ export class QuickAccessSidebar {
     index: number,
     siblingCount: number,
   ): HTMLElement {
+    const nameSemantics = getItemNameSemantics(chat.title);
     const item = createWolfElement("div", "quick-access-chat");
     item.className = "wolf-quick-access-chat";
     item.dataset.conversationId = chat.conversationId;
@@ -455,9 +459,9 @@ export class QuickAccessSidebar {
     const link = createWolfElement("a", "quick-access-chat-link");
     link.className = "wolf-quick-access-chat-link";
     link.href = chat.url;
-    link.append(this.createItemNameViewport(chat.title));
-    link.title = chat.title;
-    link.setAttribute("aria-label", chat.title);
+    link.append(this.createItemNameViewport(nameSemantics.visibleText));
+    link.title = nameSemantics.tooltip;
+    link.setAttribute("aria-label", nameSemantics.accessibleName);
     const hierarchySpacer = document.createElement("span");
     hierarchySpacer.className = "wolf-chat-hierarchy-spacer";
     hierarchySpacer.setAttribute("aria-hidden", "true");
@@ -961,18 +965,24 @@ export class QuickAccessSidebar {
       if (this.settings?.favorites.itemNameDisplay !== "compact") {
         return;
       }
-      const metrics = getOverflowRevealMetrics(
+      const overflowState = getItemNameOverflowState(
         text.scrollWidth,
         viewport.clientWidth,
         window.matchMedia("(prefers-reduced-motion: reduce)").matches,
       );
-      if (!metrics) {
+      if (overflowState.overflowing) {
+        viewport.dataset.overflowing = "true";
+      } else {
         delete viewport.dataset.overflowing;
+      }
+      const metrics = overflowState.revealMetrics;
+      if (!metrics) {
+        delete viewport.dataset.revealActive;
         text.style.removeProperty("--wolf-name-scroll-distance");
         text.style.removeProperty("--wolf-name-scroll-duration");
         return;
       }
-      viewport.dataset.overflowing = "true";
+      viewport.dataset.revealActive = "true";
       text.style.setProperty(
         "--wolf-name-scroll-distance",
         `${metrics.distancePixels}px`,
@@ -983,7 +993,9 @@ export class QuickAccessSidebar {
       );
     });
     viewport.addEventListener("pointerleave", () => {
-      delete viewport.dataset.overflowing;
+      delete viewport.dataset.revealActive;
+      text.style.removeProperty("--wolf-name-scroll-distance");
+      text.style.removeProperty("--wolf-name-scroll-duration");
     });
     return viewport;
   }

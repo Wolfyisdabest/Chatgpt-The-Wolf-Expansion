@@ -23,6 +23,15 @@
   width: 100%;
 }
 
+.wolf-settings-gear-icon {
+  background-color: currentColor;
+  display: block;
+  flex: 0 0 auto;
+  height: 1rem;
+  mask: var(--wolf-settings-gear-url) center / contain no-repeat;
+  width: 1rem;
+}
+
 .wolf-open-settings:hover,
 .wolf-open-settings:focus-visible,
 .wolf-settings-close:hover,

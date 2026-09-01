@@ -3,7 +3,6 @@ import type { Logger } from "../../core/logger";
 import type { WolfSidebarRoot } from "../../core/WolfSidebarRoot";
 import { debounce } from "../../shared/events";
 import { createWolfElement } from "../../shared/dom";
-import { createIcon } from "../../shared/icons";
 import type { Feature, Unsubscribe } from "../../shared/types";
 import { SettingsService } from "../../settings/settings";
 import type { WolfExpansionSettings } from "../../storage/schemas";
@@ -80,8 +79,12 @@ export class InChatSettingsFeature implements Feature {
 
       const label = document.createElement("span");
       label.textContent = "Wolf Expansion settings";
-      const icon = document.createElement("span");
-      icon.append(createIcon("settings"));
+      const icon = createWolfElement("span", "settings-gear-icon");
+      icon.className = "wolf-settings-gear-icon";
+      icon.style.setProperty(
+        "--wolf-settings-gear-url",
+        `url("${browser.runtime.getURL("icons/settings-gear.svg")}")`,
+      );
       icon.setAttribute("aria-hidden", "true");
       button.append(label, icon);
       button.addEventListener("click", (event) => {
@@ -166,7 +169,7 @@ export class InChatSettingsFeature implements Feature {
             { value: "compact", label: "Compact" },
             { value: "full", label: "Full" },
           ],
-          "Compact reveals clipped names on hover; Full wraps names.",
+          "Compact reveals faded overflow on hover; Full shows up to two lines.",
         ),
       ]),
       this.createSettingsGroup("Folders", [

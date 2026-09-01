@@ -18,6 +18,7 @@ const tests = [
   "tests/quickAccess.test.ts",
   "tests/quickAccessMembership.test.ts",
   "tests/settings.test.ts",
+  "tests/settingsIcon.test.ts",
   "tests/sidebarPlacement.test.ts",
 ];
 

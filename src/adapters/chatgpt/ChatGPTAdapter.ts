@@ -2,7 +2,10 @@ import { isWolfElement, WOLF_ATTRIBUTE } from "../../shared/dom";
 import type { Logger } from "../../core/logger";
 import type { Unsubscribe } from "../../shared/types";
 import { createConversationUrl, parseConversationId } from "./conversationUrl";
-import { normalizeConversationIdentity } from "./conversationIdentity";
+import {
+  normalizeConversationIdentity,
+  sanitizeConversationTitle,
+} from "./conversationIdentity";
 import {
   TransientMenuTargetStore,
   type ConversationMenuKind,
@@ -227,12 +230,12 @@ export class DefaultChatGPTAdapter implements ChatGPTAdapter {
   }
 
   public getConversationTitle(element: HTMLElement): string | null {
-    const labelledTitle = element.getAttribute("aria-label")?.trim();
+    const labelledTitle = sanitizeConversationTitle(element.getAttribute("aria-label"));
     if (labelledTitle) {
       return labelledTitle;
     }
 
-    const explicitTitle = element.getAttribute("title")?.trim();
+    const explicitTitle = sanitizeConversationTitle(element.getAttribute("title"));
     if (explicitTitle) {
       return explicitTitle;
     }
@@ -246,7 +249,9 @@ export class DefaultChatGPTAdapter implements ChatGPTAdapter {
         nativeAction.remove();
       });
     }
-    const text = titleSource.textContent?.replace(/\s+/gu, " ").trim();
+    const text = sanitizeConversationTitle(
+      titleSource.textContent?.replace(/\s+/gu, " "),
+    );
     return text || null;
   }
 
