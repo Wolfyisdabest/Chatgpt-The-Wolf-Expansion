@@ -2,6 +2,7 @@ import type {
   ChatGPTAdapter,
   ConversationReference,
 } from "../../adapters/chatgpt/ChatGPTAdapter";
+import type { NativeConversationActionUnavailableReason } from "../../adapters/chatgpt/nativeConversationActions";
 import { normalizeConversationIdentity, type NormalizedConversationIdentity } from "../../adapters/chatgpt/conversationIdentity";
 import type { Logger } from "../../core/logger";
 import type { WolfSidebarRoot } from "../../core/WolfSidebarRoot";
@@ -43,6 +44,7 @@ import {
   shouldCancelFolderNameEditor,
   shouldCloseFolderMenu,
 } from "./outsideInteraction";
+import type { TreeBranchMetadata } from "./treeBranchMetadata";
 
 interface QuickAccessSidebarCallbacks {
   onSectionCollapseChange(collapsed: boolean): Promise<void>;
@@ -110,6 +112,7 @@ export class QuickAccessSidebar {
   private readonly conversations = new Map<string, NormalizedConversationIdentity>();
   private readonly nativeDraggableStates = new Map<HTMLElement, string | null>();
   private folderMenuGuardInstalled = false;
+  private nativeActionStatusTimeout: number | null = null;
 
   public constructor(
     private readonly adapter: ChatGPTAdapter,
@@ -243,6 +246,12 @@ export class QuickAccessSidebar {
     status.setAttribute("role", "status");
     status.setAttribute("aria-live", "polite");
     section.append(status);
+    const nativeActionStatus = createWolfElement("p", "native-action-status");
+    nativeActionStatus.className = "wolf-native-action-status";
+    nativeActionStatus.hidden = true;
+    nativeActionStatus.setAttribute("role", "status");
+    nativeActionStatus.setAttribute("aria-live", "polite");
+    section.append(nativeActionStatus);
     this.lastRenderSignature = renderSignature;
     this.finishEditorReconciliation(editorSnapshot);
     this.syncFolderMenuOutsideGuard();
@@ -337,6 +346,10 @@ export class QuickAccessSidebar {
     this.editorMode = null;
     this.removeFolderMenuOutsideGuard();
     this.cancelNameEditor(false);
+    if (this.nativeActionStatusTimeout !== null) {
+      window.clearTimeout(this.nativeActionStatusTimeout);
+      this.nativeActionStatusTimeout = null;
+    }
   }
 
   private appendHierarchyRegions(
@@ -349,7 +362,6 @@ export class QuickAccessSidebar {
     const folderRegion = createWolfElement("div", "folder-region");
     folderRegion.className = "wolf-folder-region";
     folderRegion.dataset.parentId = parentId ?? "";
-    folderRegion.classList.toggle("wolf-tree-child-region", parentId !== null);
     folders.forEach((folder, index) => {
       folderRegion.append(
         this.createInsertionTarget("folder-insert", parentId, index, depth),
@@ -364,7 +376,6 @@ export class QuickAccessSidebar {
     const chatRegion = createWolfElement("div", "chat-region");
     chatRegion.className = "wolf-chat-region";
     chatRegion.dataset.parentId = parentId ?? "";
-    chatRegion.classList.toggle("wolf-tree-child-region", parentId !== null);
     chats.forEach((chat, index) => {
       chatRegion.append(
         this.createInsertionTarget("chat-insert", parentId, index, depth),
@@ -390,6 +401,7 @@ export class QuickAccessSidebar {
     item.dataset.wolfDropKind = "folder";
     item.dataset.hasParent = String(depth > 0);
     item.dataset.itemNameDisplay = this.settings?.favorites.itemNameDisplay ?? "compact";
+    this.applyTreeBranchMetadata(item, node.branch);
     item.draggable = isFolderDraggable(this.nameEditor.activeState, node.folder.id);
     item.setAttribute("role", "treeitem");
     item.setAttribute("aria-expanded", String(!node.folder.collapsed));
@@ -440,6 +452,7 @@ export class QuickAccessSidebar {
     controls.append(actions);
     row.append(toggle, name, controls);
     item.append(row);
+    item.prepend(this.createTreeGuides(node.branch));
 
     if (this.isEditorFor(node.folder.id)) {
       item.append(this.createFolderEditor(node));
@@ -479,6 +492,7 @@ export class QuickAccessSidebar {
     item.dataset.isQuickAccess = String(chat.isQuickAccess);
     item.dataset.hasParent = String(depth > 0);
     item.dataset.itemNameDisplay = chat.nameDisplayMode;
+    this.applyTreeBranchMetadata(item, chat.branch);
     item.draggable = true;
     const hierarchyLayout = getQuickAccessHierarchyLayout(depth, "chat");
     item.dataset.logicalDepth = String(hierarchyLayout.logicalDepth);
@@ -527,8 +541,105 @@ export class QuickAccessSidebar {
         this.callbacks.onRemoveQuickAccess(chat.conversationId)));
       controls.append(remove);
     }
-    item.append(link, controls);
+    controls.append(this.createNativeActionsButton(chat));
+    item.append(this.createTreeGuides(chat.branch), link, controls);
     return item;
+  }
+
+  private createTreeGuides(branch: TreeBranchMetadata): HTMLElement {
+    const guides = createWolfElement("span", "tree-guides");
+    guides.className = "wolf-tree-guides";
+    guides.setAttribute("aria-hidden", "true");
+    if (branch.depth === 0) {
+      guides.hidden = true;
+      return guides;
+    }
+    branch.ancestorHasNextSibling.forEach((continues, column) => {
+      if (!continues) {
+        return;
+      }
+      const guide = document.createElement("span");
+      guide.className = "wolf-tree-guide wolf-tree-guide-ancestor";
+      guide.style.setProperty("--wolf-tree-column", String(column));
+      guides.append(guide);
+    });
+    const branchGuide = document.createElement("span");
+    branchGuide.className = "wolf-tree-guide wolf-tree-guide-branch";
+    branchGuide.classList.toggle("wolf-is-last-branch", branch.isLastSibling);
+    branchGuide.style.setProperty("--wolf-tree-column", String(branch.depth - 1));
+    guides.append(branchGuide);
+    return guides;
+  }
+
+  private applyTreeBranchMetadata(
+    item: HTMLElement,
+    branch: TreeBranchMetadata,
+  ): void {
+    item.dataset.treeDepth = String(branch.depth);
+    item.dataset.treeLastSibling = String(branch.isLastSibling);
+    item.dataset.treeAncestorContinuations = branch.ancestorHasNextSibling
+      .map((continues) => continues ? "1" : "0")
+      .join("");
+  }
+
+  private createNativeActionsButton(chat: QuickAccessChatView): HTMLButtonElement {
+    const label = `Actions for ${chat.title}`;
+    const button = this.createIconButton("more", label);
+    button.dataset.nativeConversationActions = chat.conversationId;
+    button.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+      const result = this.adapter.openNativeConversationActions(chat.conversationId);
+      if (result.status === "delegated") {
+        button.title = label;
+        this.clearNativeActionStatus();
+        return;
+      }
+      button.title = "ChatGPT actions unavailable for this chat right now.";
+      this.showNativeActionUnavailable(result.reason);
+    });
+    return button;
+  }
+
+  private showNativeActionUnavailable(
+    reason: NativeConversationActionUnavailableReason,
+  ): void {
+    const status = this.section?.querySelector<HTMLElement>(
+      '[data-wolf-expansion="native-action-status"]',
+    );
+    if (!status) {
+      return;
+    }
+    status.textContent = "ChatGPT actions unavailable for this chat right now.";
+    status.hidden = false;
+    status.dataset.reason = reason;
+    if (this.nativeActionStatusTimeout !== null) {
+      window.clearTimeout(this.nativeActionStatusTimeout);
+    }
+    this.nativeActionStatusTimeout = window.setTimeout(() => {
+      if (status.isConnected) {
+        status.hidden = true;
+        status.textContent = "";
+        delete status.dataset.reason;
+      }
+      this.nativeActionStatusTimeout = null;
+    }, 3_000);
+  }
+
+  private clearNativeActionStatus(): void {
+    if (this.nativeActionStatusTimeout !== null) {
+      window.clearTimeout(this.nativeActionStatusTimeout);
+      this.nativeActionStatusTimeout = null;
+    }
+    const status = this.section?.querySelector<HTMLElement>(
+      '[data-wolf-expansion="native-action-status"]',
+    );
+    if (status) {
+      status.hidden = true;
+      status.textContent = "";
+      delete status.dataset.reason;
+    }
   }
 
   private createInsertionTarget(

@@ -18,6 +18,11 @@ import {
   getWolfRootInsertionIndex,
   type SidebarSectionKind,
 } from "./sidebarPlacement";
+import {
+  resolveExactNativeConversationAction,
+  type NativeConversationActionCandidate,
+  type NativeConversationActionResult,
+} from "./nativeConversationActions";
 
 export interface ConversationIdentity {
   conversationId: string;
@@ -73,6 +78,7 @@ export interface ChatGPTAdapter {
   findConversationActionInsertionTarget(
     link: HTMLAnchorElement,
   ): ConversationActionInsertionTarget | null;
+  openNativeConversationActions(conversationId: string): NativeConversationActionResult;
   watchSidebar(callback: () => void): Unsubscribe;
   watchNavigation(callback: () => void): Unsubscribe;
   watchConversationMenus(callback: (context: ConversationMenuContext) => void): Unsubscribe;
@@ -380,6 +386,72 @@ export class DefaultChatGPTAdapter implements ChatGPTAdapter {
     return null;
   }
 
+  public openNativeConversationActions(
+    conversationId: string,
+  ): NativeConversationActionResult {
+    this.logger.debug("Quick Access native actions requested.", { conversationId });
+    const sidebar = this.findSidebar();
+    if (!sidebar) {
+      return this.logNativeActionUnavailable(conversationId, "row-not-mounted");
+    }
+
+    const matchingLinks = this.findConversationLinks().filter(
+      (link) => this.getConversationIdFromUrl(link.href) === conversationId,
+    );
+    const rowCandidates = new Map<HTMLElement, NativeConversationActionCandidate<HTMLElement>>();
+    for (const link of matchingLinks) {
+      let candidate = link.parentElement;
+      for (let depth = 0; candidate && candidate !== sidebar && depth < 8; depth += 1) {
+        const conversationIds = [...this.findConversationIdentitiesWithin(candidate).keys()];
+        if (conversationIds.length > 1) {
+          break;
+        }
+        if (conversationIds.length === 1 && conversationIds[0] === conversationId) {
+          const triggers = Array.from(
+            candidate.querySelectorAll<HTMLElement>(CHATGPT_SELECTORS.button),
+          ).filter(
+            (control) =>
+              !control.closest(`[${WOLF_ATTRIBUTE}]`) &&
+              this.isConversationMenuTrigger(control),
+          );
+          if (triggers.length > 0) {
+            rowCandidates.set(candidate, {
+              conversationIds,
+              triggers,
+              wolfOwned: isWolfElement(candidate),
+            });
+            break;
+          }
+        }
+        candidate = candidate.parentElement;
+      }
+    }
+
+    const resolution = resolveExactNativeConversationAction(
+      conversationId,
+      matchingLinks.length,
+      [...rowCandidates.values()],
+    );
+    if (resolution.status === "unavailable") {
+      return this.logNativeActionUnavailable(conversationId, resolution.reason);
+    }
+    const trigger = resolution.trigger;
+    if (
+      !trigger.isConnected ||
+      trigger.getAttribute("aria-disabled") === "true" ||
+      (trigger instanceof HTMLButtonElement && trigger.disabled)
+    ) {
+      return this.logNativeActionUnavailable(conversationId, "unsupported");
+    }
+
+    this.logger.debug("Native row resolved.", { conversationId });
+    this.logger.debug("Native action trigger resolved.", { conversationId });
+    trigger.focus({ preventScroll: true });
+    trigger.click();
+    this.logger.debug("Native menu trigger activation dispatched.", { conversationId });
+    return { status: "delegated" };
+  }
+
   public watchSidebar(callback: () => void): Unsubscribe {
     let observedSidebar: HTMLElement | null = null;
     const sidebarObserver = new MutationObserver((mutations) => {
@@ -446,6 +518,14 @@ export class DefaultChatGPTAdapter implements ChatGPTAdapter {
       sidebarObserver.disconnect();
       replacementObserver.disconnect();
     };
+  }
+
+  private logNativeActionUnavailable(
+    conversationId: string,
+    reason: Exclude<NativeConversationActionResult, { status: "delegated" }>['reason'],
+  ): NativeConversationActionResult {
+    this.logger.debug("Native menu unavailable.", { conversationId, reason });
+    return { status: "unavailable", reason };
   }
 
   public watchNavigation(callback: () => void): Unsubscribe {

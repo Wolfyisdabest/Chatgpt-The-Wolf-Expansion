@@ -59,7 +59,7 @@ test("chat rows do not reserve fake folder control spacers", () => {
   assert.doesNotMatch(source, /wolf-chat-hierarchy-spacer/);
 });
 
-test("only actual child regions receive subtle tree connectors", () => {
+test("only runtime branch metadata creates decorative tree guides", () => {
   const source = readFileSync(
     path.join(process.cwd(), "src/features/quickAccess/QuickAccessSidebar.ts"),
     "utf8",
@@ -68,10 +68,12 @@ test("only actual child regions receive subtle tree connectors", () => {
     path.join(process.cwd(), "src/features/quickAccess/quick-access.css"),
     "utf8",
   );
-  assert.match(source, /classList\.toggle\("wolf-tree-child-region", parentId !== null\)/);
-  assert.match(css, /\.wolf-tree-child-region[^}]*::before/s);
+  assert.match(source, /createTreeGuides\(chat\.branch\)/);
+  assert.match(source, /createTreeGuides\(node\.branch\)/);
+  assert.match(css, /\.wolf-tree-guide-branch::after/);
   assert.match(css, /pointer-events:\s*none;/);
-  assert.match(css, /color-mix\(in srgb, currentColor 22%, transparent\)/);
+  assert.match(css, /color-mix\(in srgb, currentColor 28%, transparent\)/);
+  assert.doesNotMatch(source, /wolf-tree-child-region/);
 });
 
 test("collapsed folder content hides its child connectors with the child region", () => {

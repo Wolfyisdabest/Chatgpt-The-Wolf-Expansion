@@ -166,23 +166,42 @@
   position: relative;
 }
 
-.wolf-tree-child-region > :is(.wolf-quick-access-folder, .wolf-quick-access-chat)::before {
-  border-block-end: 1px solid color-mix(in srgb, currentColor 22%, transparent);
-  border-inline-start: 1px solid color-mix(in srgb, currentColor 22%, transparent);
-  content: "";
-  height: 0.72rem;
-  inset-block-start: 0;
+.wolf-tree-guides {
+  inset: 0;
+  pointer-events: none;
+  position: absolute;
+  z-index: 0;
+}
+
+.wolf-tree-guide {
+  border-inline-start: 1px solid color-mix(in srgb, currentColor 28%, transparent);
+  inset-block: 0;
   inset-inline-start: min(
     calc(
       var(--wolf-root-indent) +
-      (var(--wolf-depth-offset, 1) - 1) * var(--wolf-nesting-indent) +
+      var(--wolf-tree-column, 0) * var(--wolf-nesting-indent) +
       0.2rem
     ),
     calc(var(--wolf-max-indent) - 0.4rem)
   );
   pointer-events: none;
   position: absolute;
-  width: 0.42rem;
+  width: 0.46rem;
+}
+
+.wolf-tree-guide-branch::after {
+  border-block-start: 1px solid color-mix(in srgb, currentColor 28%, transparent);
+  content: "";
+  inset-block-start: 1rem;
+  inset-inline-start: -1px;
+  pointer-events: none;
+  position: absolute;
+  width: 0.46rem;
+}
+
+.wolf-tree-guide-branch.wolf-is-last-branch {
+  inset-block-end: auto;
+  height: 1rem;
 }
 
 .wolf-quick-access-controls {
@@ -414,6 +433,16 @@
   margin: 0;
   opacity: 0.62;
   padding: 0.5rem 0.5rem 0.5rem 1.5rem;
+}
+
+.wolf-native-action-status {
+  font-size: 0.76rem;
+  margin: 0.15rem 0.5rem 0.35rem;
+  opacity: 0.68;
+}
+
+.wolf-native-action-status[hidden] {
+  display: none;
 }
 
 .wolf-debug-quick-access-current {

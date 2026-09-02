@@ -6,6 +6,12 @@ import type {
 import { normalizeConversationTitle } from "../../adapters/chatgpt/conversationIdentity";
 import { resolveChatNameDisplayMode } from "../../settings/folderDisplayMode";
 import type { ItemNameDisplayMode } from "../../storage/schemas";
+import {
+  createTreeBranchMetadata,
+  getChildAncestorContinuations,
+  ROOT_TREE_BRANCH,
+  type TreeBranchMetadata,
+} from "./treeBranchMetadata";
 
 export interface QuickAccessChatView {
   conversationId: string;
@@ -15,12 +21,14 @@ export interface QuickAccessChatView {
   isQuickAccess: boolean;
   folderId: string | null;
   nameDisplayMode: ItemNameDisplayMode;
+  branch: TreeBranchMetadata;
 }
 
 export interface QuickAccessFolderView {
   folder: FolderRecord;
   folders: QuickAccessFolderView[];
   chats: QuickAccessChatView[];
+  branch: TreeBranchMetadata;
 }
 
 export interface QuickAccessProjection {
@@ -70,6 +78,7 @@ export function buildQuickAccessProjection(
         isQuickAccess: true,
         folderId: null,
         nameDisplayMode: globalItemNameDisplay,
+        branch: ROOT_TREE_BRANCH,
       }))
     : [];
 
@@ -79,7 +88,12 @@ export function buildQuickAccessProjection(
 
   const views = new Map<string, QuickAccessFolderView>();
   for (const folder of folders) {
-    views.set(folder.id, { folder, folders: [], chats: [] });
+    views.set(folder.id, {
+      folder,
+      folders: [],
+      chats: [],
+      branch: ROOT_TREE_BRANCH,
+    });
   }
   for (const membership of memberships) {
     if (!favoriteIds.has(membership.conversationId)) {
@@ -102,6 +116,7 @@ export function buildQuickAccessProjection(
         folderChatNameDisplayOverrides,
         globalItemNameDisplay,
       ),
+      branch: ROOT_TREE_BRANCH,
     });
   }
 
@@ -115,6 +130,7 @@ export function buildQuickAccessProjection(
     }
   }
   sortHierarchy(rootFolders);
+  assignTreeBranches(rootFolders, looseChats, 0, []);
   return { folders: rootFolders, looseChats, visible: true };
 }
 
@@ -155,6 +171,37 @@ function sortHierarchy(folders: QuickAccessFolderView[]): void {
     folder.chats.sort(compareBySortIndex);
     sortHierarchy(folder.folders);
   }
+}
+
+function assignTreeBranches(
+  folders: QuickAccessFolderView[],
+  chats: QuickAccessChatView[],
+  depth: number,
+  ancestorHasNextSibling: readonly boolean[],
+): void {
+  const siblingCount = folders.length + chats.length;
+  folders.forEach((folder, index) => {
+    folder.branch = createTreeBranchMetadata(
+      depth,
+      index,
+      siblingCount,
+      ancestorHasNextSibling,
+    );
+    assignTreeBranches(
+      folder.folders,
+      folder.chats,
+      depth + 1,
+      getChildAncestorContinuations(folder.branch),
+    );
+  });
+  chats.forEach((chat, index) => {
+    chat.branch = createTreeBranchMetadata(
+      depth,
+      folders.length + index,
+      siblingCount,
+      ancestorHasNextSibling,
+    );
+  });
 }
 
 function compareBySortIndex(

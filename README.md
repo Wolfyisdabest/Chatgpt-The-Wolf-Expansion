@@ -6,11 +6,15 @@
 
 ChatGPT: The Wolf Expansion is a free, open-source Firefox and Floorp extension that adds missing power-user features to ChatGPT while preserving ChatGPT's normal interface.
 
-> **Development status:** `v0.1-dev.9` — Settings & Organization UX Overhaul. This is an early development build intended for manual testing. ChatGPT's DOM changes frequently, so integrations may need ongoing adapter updates.
+> **Development status:** `v0.2-dev.1` — Quick Access Interop & Tree Polish. This is an early development build intended for manual testing. ChatGPT's DOM changes frequently, so integrations may need ongoing adapter updates.
 
 This project is unofficial and is not affiliated with, endorsed by, or sponsored by OpenAI.
 
-## Implemented in v0.1-dev.9
+## Implemented in v0.2-dev.1
+
+- Branch-aware file-explorer connectors now distinguish continuing and final children, carry only necessary ancestor lines through nested folders, and leave root conversations entirely unconnected.
+- Every Quick Access conversation has a compact `...` action that delegates by exact conversation ID to the real mounted ChatGPT sidebar menu. ChatGPT continues to own Rename, Pin, Archive, Delete, confirmations, positioning, and menu lifecycle.
+- Native action delegation is intentionally best-effort: if the exact native row is virtualized, missing, or ambiguous, Wolf Expansion fails closed and leaves core Quick Access organization fully operational.
 
 - A cleaner file-explorer-style Quick Access hierarchy: root chats no longer reserve fake folder controls, while actual folder children receive restrained theme-aware relationship connectors.
 - Redesigned, consistently grouped in-ChatGPT and Firefox/Floorp settings interfaces backed by the same versioned `SettingsService` record.
@@ -106,6 +110,8 @@ Open settings directly from the **Wolf Expansion** settings entry in ChatGPT's s
 9. Open a folder menu and click outside to close it. Start create/rename, type a draft, and click outside; confirm it cancels while Enter commits, Escape cancels, and ordinary sidebar reconciliation preserves the editor.
 10. Rename both a root Quick Access chat and a foldered chat in ChatGPT without reloading. Confirm the title updates in place, membership/order remain unchanged, and Compact/Full overflow presentation follows the new title.
 11. Rename a conversation to `Pinned: Test Chat` and confirm Wolf Expansion preserves that title literally in the row, tooltip, and accessible label.
+12. Click `...` on a root and foldered Quick Access conversation whose native history row is mounted. Confirm ChatGPT's real menu opens without navigating, contains one set of Wolf actions, and its native Rename updates Quick Access through live title synchronization.
+13. Try `...` for a virtualized/unmounted native row and confirm the concise unavailable message appears without opening another chat's actions.
 
 Folder metadata lives in extension `storage.local`. Clearing ordinary ChatGPT site data or browser cache is not intended to remove it; explicitly clearing extension data or uninstalling the extension can.
 
@@ -151,7 +157,8 @@ Current storage keys are:
 - Menu integration requires either an exact sidebar-row opener identity or an overflow-style current-conversation opener on a real `/c/<id>` page. Other ChatGPT menus remain untouched.
 - A conversation deleted on ChatGPT remains in local Quick Access/folder metadata because absence from the visible sidebar is not proof of deletion. Opening it may lead to ChatGPT's missing-conversation page; it can still be removed locally.
 - Conversation titles update only from links ChatGPT currently exposes in the native sidebar. Conflicting duplicate snapshots for one conversation ID are ignored until ChatGPT exposes a stable title.
-- The dev.9 tree readability, settings redesign, per-folder display inheritance, and outside-click interactions require signed-in Firefox/Floorp live verification.
+- Quick Access native action delegation requires the exact matching ChatGPT history row and native menu trigger to be mounted. Wolf Expansion does not scroll history, navigate, or guess when the row is unavailable.
+- The v0.2-dev.1 branch connectors and native menu/Rename interoperability require signed-in Firefox/Floorp live verification.
 - This milestone assigns each conversation to at most one folder. Folder references do not hide or move ChatGPT's native Recent-chat row.
 
 ## License

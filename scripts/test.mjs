@@ -16,6 +16,7 @@ const tests = [
   "tests/hierarchyLayout.test.ts",
   "tests/itemNameDisplay.test.ts",
   "tests/menuContext.test.ts",
+  "tests/nativeConversationActions.test.ts",
   "tests/outsideInteraction.test.ts",
   "tests/quickAccess.test.ts",
   "tests/quickAccessMembership.test.ts",
@@ -23,6 +24,7 @@ const tests = [
   "tests/settings.test.ts",
   "tests/settingsIcon.test.ts",
   "tests/sidebarPlacement.test.ts",
+  "tests/treeBranchMetadata.test.ts",
 ];
 
 await rm(outputDirectory, { recursive: true, force: true });
