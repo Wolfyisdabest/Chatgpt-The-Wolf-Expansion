@@ -56,6 +56,8 @@ export interface QuickAccessUiState {
 export interface LegacyAccountData {
   preservedAt: number;
   sourceSchemaVersion: number | null;
+  claimedToScopeId: string | null;
+  claimedAt: number | null;
   favorites: FavoriteConversation[];
   uiState: FavoritesUiState;
   folders: FolderRecord[];

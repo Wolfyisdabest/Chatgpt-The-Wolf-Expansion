@@ -6,11 +6,14 @@
 
 ChatGPT: The Wolf Expansion is a free, open-source Firefox and Floorp extension that adds missing power-user features to ChatGPT while preserving ChatGPT's normal interface.
 
-> **Development status:** `v0.2-dev.2` — Quick Access Interaction Polish. This is an early development build intended for manual testing. ChatGPT's DOM changes frequently, so integrations may need ongoing adapter updates.
+> **Development status:** `v0.2-dev.2.1` — Legacy Quick Access Recovery. This is an early development build intended for manual testing. ChatGPT's DOM changes frequently, so integrations may need ongoing adapter updates.
 
 This project is unofficial and is not affiliated with, endorsed by, or sponsored by OpenAI.
 
-## Implemented in v0.2-dev.2
+## Implemented in v0.2-dev.2.1
+
+- In-ChatGPT settings now offers a one-time **Restore previous Quick Access data** action when an identified account has an empty scoped destination and a preserved pre-account-scoping backup exists. Restoration requires a second explicit confirmation, copies the complete organization record in one storage operation, and immediately reloads Quick Access.
+- The legacy backup remains retained after restoration and is marked with only the opaque claimed account scope. It cannot be claimed twice or by another account, and an existing destination is never overwritten or merged automatically.
 
 - Quick Access conversation actions now open in a Wolf-owned menu anchored to the selected Quick Access row. Rename, Pin/Unpin, Archive, and Delete are stored only as semantic action kinds; activation reacquires the exact live native row and current ChatGPT control/menu, so detached portal nodes are never reused.
 - The exact current `/c/<conversation-id>` receives a subtle Quick Access highlight and `aria-current="page"`, including when it is nested in a folder.
@@ -150,7 +153,7 @@ Current storage keys are:
 - `wolfExpansion.quickAccessUiState`
 - `wolfExpansion.folderChatNameDisplayOverrides`
 - `wolfExpansion.accounts.<opaque-hash>.*` for account-owned variants of the organization keys above
-- `wolfExpansion.legacyAccountData` for conservatively preserved pre-schema-7 unscoped organization data
+- `wolfExpansion.legacyAccountData` for conservatively preserved pre-schema-7 unscoped organization data and its opaque one-time claim marker
 
 ## Privacy and security
 
@@ -162,7 +165,7 @@ Current storage keys are:
 - Host access is limited to `https://chatgpt.com/*`.
 - Extension data remains in Firefox `storage.local` unless a future, explicitly enabled export or sync feature is added.
 - Raw visible account identity evidence is not persisted. A sufficiently strong visible account signal is normalized in memory and hashed locally before it is used as a storage namespace. No cookie, token, auth header, or private endpoint is involved.
-- If a stable account cannot be resolved safely, Wolf hides account-owned organization data instead of guessing. Legacy unscoped data is preserved separately and is never silently assigned to the account that happens to be active during upgrade.
+- If a stable account cannot be resolved safely, Wolf hides account-owned organization data instead of guessing. Legacy unscoped data is preserved separately and is never silently assigned. An identified account with an empty scope may claim it only through the explicit in-ChatGPT recovery action.
 - Quick Access, folders, ordering, collapse state, and settings do not use ChatGPT storage, `window.localStorage`, `sessionStorage`, or the browser/site cache. Clearing ordinary ChatGPT site data or cache is not intended to clear extension storage. Explicitly clearing extension data or uninstalling the extension can remove it.
 
 ## Known limitations
@@ -174,7 +177,7 @@ Current storage keys are:
 - Conversation titles update only from exact-ID native rows ChatGPT currently exposes. A single changed title can supersede its cached duplicate; genuinely ambiguous conflicting observations are still ignored safely.
 - Native actions in the local Quick Access menu require the exact matching ChatGPT history row and native menu trigger to be mounted. Wolf Expansion does not scroll history, navigate, or guess when the row is unavailable; Wolf-owned organization actions remain usable.
 - Account resolution relies on ordinary visible/semantic ChatGPT UI. Accounts without a sufficiently unique visible profile signal remain fail-closed until stronger visible evidence is present; this avoids cross-account exposure at the cost of temporarily hiding organization UI.
-- The v0.2-dev.2 local menu, native action proxy, rename preview, current-row styling, title reveal geometry, and stale-title reconciliation require signed-in Firefox/Floorp live verification.
+- The v0.2-dev.2.1 legacy recovery action, plus the v0.2-dev.2 local menu, native action proxy, rename preview, current-row styling, title reveal geometry, and stale-title reconciliation, require signed-in Firefox/Floorp live verification.
 - This milestone assigns each conversation to at most one folder. Folder references do not hide or move ChatGPT's native Recent-chat row.
 
 ## License

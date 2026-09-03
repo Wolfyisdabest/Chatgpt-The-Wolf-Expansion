@@ -88,6 +88,7 @@ export async function migrateStorage(storage: KeyValueStorage): Promise<void> {
     STORAGE_KEYS.legacyAccountData,
     undefined,
   );
+  const normalizedExistingLegacyAccountData = normalizeLegacyAccountData(rawLegacyAccountData);
   const legacyFolderChatNameDisplayOverrides = {
     ...settings.folders.chatNameDisplayOverrides,
   };
@@ -101,6 +102,8 @@ export async function migrateStorage(storage: KeyValueStorage): Promise<void> {
       ? {
           preservedAt: Date.now(),
           sourceSchemaVersion: typeof rawSchemaVersion === "number" ? rawSchemaVersion : null,
+          claimedToScopeId: null,
+          claimedAt: null,
           favorites,
           uiState,
           folders,
@@ -109,7 +112,7 @@ export async function migrateStorage(storage: KeyValueStorage): Promise<void> {
           quickAccessUiState,
           folderChatNameDisplayOverrides: legacyFolderChatNameDisplayOverrides,
         }
-      : undefined;
+      : normalizedExistingLegacyAccountData ?? undefined;
   if (Object.keys(legacyFolderChatNameDisplayOverrides).length > 0) {
     settings = {
       ...settings,
@@ -142,13 +145,60 @@ export async function migrateStorage(storage: KeyValueStorage): Promise<void> {
   if (JSON.stringify(rawQuickAccessUiState) !== JSON.stringify(quickAccessUiState)) {
     changes[STORAGE_KEYS.quickAccessUiState] = quickAccessUiState;
   }
-  if (legacyAccountData) {
+  if (
+    legacyAccountData &&
+    JSON.stringify(rawLegacyAccountData) !== JSON.stringify(legacyAccountData)
+  ) {
     changes[STORAGE_KEYS.legacyAccountData] = legacyAccountData;
   }
 
   if (Object.keys(changes).length > 0) {
     await storage.setMany(changes);
   }
+}
+
+export function normalizeLegacyAccountData(value: unknown): LegacyAccountData | null {
+  if (!isRecord(value)) {
+    return null;
+  }
+  const folders = normalizeFolders(value.folders);
+  const claimedToScopeId = typeof value.claimedToScopeId === "string" &&
+      value.claimedToScopeId.trim()
+    ? value.claimedToScopeId.trim()
+    : null;
+  return {
+    preservedAt: typeof value.preservedAt === "number" ? value.preservedAt : 0,
+    sourceSchemaVersion: typeof value.sourceSchemaVersion === "number"
+      ? value.sourceSchemaVersion
+      : null,
+    claimedToScopeId,
+    claimedAt: claimedToScopeId && typeof value.claimedAt === "number"
+      ? value.claimedAt
+      : null,
+    favorites: normalizeFavorites(value.favorites),
+    uiState: normalizeUiState(value.uiState),
+    folders,
+    folderMembership: normalizeFolderMembership(
+      value.folderMembership,
+      new Set(folders.map((folder) => folder.id)),
+    ),
+    foldersUiState: normalizeFoldersUiState(value.foldersUiState),
+    quickAccessUiState: normalizeQuickAccessUiState(value.quickAccessUiState),
+    folderChatNameDisplayOverrides: pruneFolderChatNameDisplayOverrides(
+      normalizeFolderChatNameDisplayOverrides(value.folderChatNameDisplayOverrides),
+      new Set(folders.map((folder) => folder.id)),
+    ),
+  };
+}
+
+export function hasLegacyOrganizationData(legacy: LegacyAccountData): boolean {
+  return legacy.favorites.length > 0 ||
+    legacy.folders.length > 0 ||
+    legacy.folderMembership.length > 0 ||
+    Object.keys(legacy.folderChatNameDisplayOverrides).length > 0 ||
+    legacy.uiState.collapsed ||
+    legacy.foldersUiState.collapsed ||
+    legacy.quickAccessUiState.collapsed;
 }
 
 export function normalizeSettings(value: unknown): WolfExpansionSettings {

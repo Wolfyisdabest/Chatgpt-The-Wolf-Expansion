@@ -6,6 +6,10 @@ import { createWolfElement } from "../../shared/dom";
 import type { Feature, Unsubscribe } from "../../shared/types";
 import { SettingsService } from "../../settings/settings";
 import type {
+  LegacyAccountRecoveryResult,
+  LegacyAccountRecoveryService,
+} from "../../storage/LegacyAccountRecoveryService";
+import type {
   FolderRecord,
   ItemNameDisplayMode,
   WolfExpansionSettings,
@@ -25,6 +29,8 @@ export class InChatSettingsFeature implements Feature {
   private stopWatchingFolders: Unsubscribe | null = null;
   private stopWatchingFolderOverrides: Unsubscribe | null = null;
   private folderChatNameDisplayOverrides: Record<string, ItemNameDisplayMode> = {};
+  private legacyRestoreConfirmationPending = false;
+  private legacyRestoreScopeId: string | null = null;
   private readonly scheduleReconcile: () => void;
 
   public constructor(
@@ -32,6 +38,10 @@ export class InChatSettingsFeature implements Feature {
     private readonly settingsService: SettingsService,
     private readonly foldersRepository: FoldersRepository,
     private readonly folderDisplayOverridesRepository: FolderDisplayOverridesRepository,
+    private readonly legacyAccountRecoveryService: LegacyAccountRecoveryService,
+    private readonly restoreLegacyAccountData: (
+      expectedScopeId: string,
+    ) => Promise<LegacyAccountRecoveryResult>,
     private readonly sidebarRoot: WolfSidebarRoot,
     private readonly logger: Logger,
   ) {
@@ -86,6 +96,8 @@ export class InChatSettingsFeature implements Feature {
 
   public resetAccountContext(): void {
     this.folderChatNameDisplayOverrides = {};
+    this.legacyRestoreConfirmationPending = false;
+    this.legacyRestoreScopeId = null;
     this.close();
   }
 
@@ -223,6 +235,7 @@ export class InChatSettingsFeature implements Feature {
           "Write local diagnostics to the ChatGPT tab console.",
         ),
       ]),
+      this.createLegacyRecoveryManager(),
     );
     form.addEventListener("change", () => {
       void this.saveForm();
@@ -239,6 +252,7 @@ export class InChatSettingsFeature implements Feature {
     document.body.append(overlay);
     this.overlay = overlay;
     this.renderFormValues();
+    void this.renderLegacyRecovery();
     dialog.focus();
   }
 
@@ -287,6 +301,110 @@ export class InChatSettingsFeature implements Feature {
     });
     manager.append(button, content);
     return manager;
+  }
+
+  private createLegacyRecoveryManager(): HTMLFieldSetElement {
+    const fieldset = createWolfElement("fieldset", "legacy-recovery");
+    fieldset.className = "wolf-legacy-recovery";
+    fieldset.hidden = true;
+    const legend = document.createElement("legend");
+    legend.textContent = "Previous Quick Access data";
+    const description = createWolfElement("p", "legacy-recovery-description");
+    description.className = "wolf-settings-group-description";
+    const actions = document.createElement("div");
+    actions.className = "wolf-legacy-recovery-actions";
+    const restoreButton = createWolfElement("button", "restore-legacy-data");
+    restoreButton.type = "button";
+    restoreButton.className = "wolf-settings-secondary-action";
+    restoreButton.textContent = "Restore previous Quick Access data";
+    const cancelButton = createWolfElement("button", "cancel-legacy-restore");
+    cancelButton.type = "button";
+    cancelButton.className = "wolf-settings-secondary-action";
+    cancelButton.textContent = "Cancel";
+    cancelButton.hidden = true;
+    restoreButton.addEventListener("click", () => {
+      if (!this.legacyRestoreConfirmationPending) {
+        this.legacyRestoreConfirmationPending = true;
+        description.textContent =
+          "Confirm assigning the preserved pre-account-scoping Wolf data to this signed-in ChatGPT account. It cannot be claimed by another account afterward.";
+        restoreButton.textContent = "Confirm restore to this account";
+        cancelButton.hidden = false;
+        return;
+      }
+      void this.performLegacyRestore(restoreButton, cancelButton);
+    });
+    cancelButton.addEventListener("click", () => {
+      this.legacyRestoreConfirmationPending = false;
+      void this.renderLegacyRecovery();
+    });
+    actions.append(restoreButton, cancelButton);
+    fieldset.append(legend, description, actions);
+    return fieldset;
+  }
+
+  private async renderLegacyRecovery(): Promise<void> {
+    const fieldset = this.overlay?.querySelector<HTMLFieldSetElement>(
+      '[data-wolf-expansion="legacy-recovery"]',
+    );
+    const description = fieldset?.querySelector<HTMLElement>(
+      '[data-wolf-expansion="legacy-recovery-description"]',
+    );
+    const restoreButton = fieldset?.querySelector<HTMLButtonElement>(
+      '[data-wolf-expansion="restore-legacy-data"]',
+    );
+    const cancelButton = fieldset?.querySelector<HTMLButtonElement>(
+      '[data-wolf-expansion="cancel-legacy-restore"]',
+    );
+    if (!fieldset || !description || !restoreButton || !cancelButton) {
+      return;
+    }
+    const status = await this.legacyAccountRecoveryService.getStatus();
+    if (!fieldset.isConnected) {
+      return;
+    }
+    this.legacyRestoreConfirmationPending = false;
+    this.legacyRestoreScopeId = null;
+    restoreButton.disabled = false;
+    restoreButton.hidden = false;
+    restoreButton.textContent = "Restore previous Quick Access data";
+    cancelButton.hidden = true;
+    if (status.state === "available") {
+      this.legacyRestoreScopeId = status.scopeId;
+      fieldset.hidden = false;
+      description.textContent =
+        `Found ${status.favoriteCount} previous Quick Access chat${status.favoriteCount === 1 ? "" : "s"} and ${status.folderCount} folder${status.folderCount === 1 ? "" : "s"}. Restore assigns this preserved data to the currently signed-in ChatGPT account.`;
+      return;
+    }
+    if (status.state === "destination-not-empty") {
+      fieldset.hidden = false;
+      restoreButton.hidden = true;
+      description.textContent =
+        "Previous data was not restored because this account already has Wolf Expansion organization data. Neither data set was changed.";
+      return;
+    }
+    fieldset.hidden = true;
+  }
+
+  private async performLegacyRestore(
+    restoreButton: HTMLButtonElement,
+    cancelButton: HTMLButtonElement,
+  ): Promise<void> {
+    restoreButton.disabled = true;
+    cancelButton.disabled = true;
+    try {
+      const expectedScopeId = this.legacyRestoreScopeId;
+      const result = expectedScopeId
+        ? await this.restoreLegacyAccountData(expectedScopeId)
+        : { state: "account-unresolved" } as const;
+      this.setStatus(getLegacyRestoreMessage(result));
+    } catch (error) {
+      this.logger.error("Could not restore previous Quick Access data.", error);
+      this.setStatus("Could not restore previous Quick Access data. Nothing was changed.");
+    } finally {
+      cancelButton.disabled = false;
+      this.legacyRestoreConfirmationPending = false;
+      await this.renderLegacyRecovery();
+    }
   }
 
   private async renderFolderOverrides(): Promise<void> {
@@ -565,4 +683,19 @@ function flattenFolders(
   };
   visit(null, 0);
   return flattened;
+}
+
+function getLegacyRestoreMessage(result: LegacyAccountRecoveryResult): string {
+  switch (result.state) {
+    case "restored":
+      return `Restored ${result.favoriteCount} Quick Access chat${result.favoriteCount === 1 ? "" : "s"} and ${result.folderCount} folder${result.folderCount === 1 ? "" : "s"}.`;
+    case "destination-not-empty":
+      return "Restore stopped because this account already has Wolf Expansion organization data. Nothing was overwritten.";
+    case "already-claimed":
+      return "This previous Quick Access backup has already been assigned and cannot be claimed again.";
+    case "account-unresolved":
+      return "Restore requires a confidently identified signed-in ChatGPT account.";
+    case "no-legacy-data":
+      return "No previous Quick Access data is available to restore.";
+  }
 }

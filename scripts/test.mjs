@@ -20,6 +20,7 @@ const tests = [
   "tests/hierarchyLayout.test.ts",
   "tests/itemNameDisplay.test.ts",
   "tests/interactionPolish.test.ts",
+  "tests/legacyAccountRecovery.test.ts",
   "tests/menuContext.test.ts",
   "tests/nativeConversationActions.test.ts",
   "tests/outsideInteraction.test.ts",

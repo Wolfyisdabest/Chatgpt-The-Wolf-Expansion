@@ -8,6 +8,10 @@ import { InChatSettingsFeature } from "../features/settings/InChatSettingsFeatur
 import { SettingsService } from "../settings/settings";
 import { migrateStorage } from "../storage/migrations";
 import { AccountScopedStorage } from "../storage/AccountScopedStorage";
+import {
+  LegacyAccountRecoveryService,
+  type LegacyAccountRecoveryResult,
+} from "../storage/LegacyAccountRecoveryService";
 import { StorageService } from "../storage/StorageService";
 import {
   createOpaqueAccountScopeId,
@@ -23,6 +27,10 @@ export class WolfExpansionApp {
   private readonly logger = new ConsoleLogger(false);
   private readonly storage = new StorageService(this.logger);
   private readonly accountStorage = new AccountScopedStorage(this.storage);
+  private readonly legacyAccountRecoveryService = new LegacyAccountRecoveryService(
+    this.storage,
+    this.accountStorage,
+  );
   private readonly settingsService = new SettingsService(this.storage);
   private readonly lifecycle = new FeatureLifecycle();
   private readonly adapter = new DefaultChatGPTAdapter(this.logger);
@@ -40,6 +48,8 @@ export class WolfExpansionApp {
     this.settingsService,
     this.foldersRepository,
     this.folderDisplayOverridesRepository,
+    this.legacyAccountRecoveryService,
+    (expectedScopeId) => this.restoreLegacyAccountData(expectedScopeId),
     this.sidebarRoot,
     this.logger,
   );
@@ -115,6 +125,31 @@ export class WolfExpansionApp {
         this.accountStorage.activeScopeId !== null &&
         (settings.favorites.enabled || settings.folders.enabled),
     );
+  }
+
+  private async restoreLegacyAccountData(
+    expectedScopeId: string,
+  ): Promise<LegacyAccountRecoveryResult> {
+    await this.lifecycle.setEnabled(this.quickAccessFeature, false);
+    await Promise.all([
+      this.quickAccessFeature.whenIdle(),
+      this.favoritesRepository.whenIdle(),
+      this.foldersRepository.whenIdle(),
+      this.folderDisplayOverridesRepository.whenIdle(),
+    ]);
+    try {
+      const result = await this.legacyAccountRecoveryService.restore(expectedScopeId);
+      if (result.state === "restored") {
+        this.logger.debug("Previous Quick Access data restored to current account scope.", {
+          favoriteCount: result.favoriteCount,
+          folderCount: result.folderCount,
+          membershipCount: result.membershipCount,
+        });
+      }
+      return result;
+    } finally {
+      await this.applySettings();
+    }
   }
 
   private queueAccountEvidence(evidence: ChatGPTAccountEvidence): void {

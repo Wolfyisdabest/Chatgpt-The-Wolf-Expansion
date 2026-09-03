@@ -2,7 +2,7 @@ import type { Unsubscribe } from "../shared/types";
 import { STORAGE_KEYS } from "./schemas";
 import type { KeyValueStorage } from "./StorageService";
 
-const ACCOUNT_OWNED_KEYS = new Set<string>([
+export const ACCOUNT_OWNED_STORAGE_KEYS = [
   STORAGE_KEYS.favorites,
   STORAGE_KEYS.uiState,
   STORAGE_KEYS.folders,
@@ -10,7 +10,9 @@ const ACCOUNT_OWNED_KEYS = new Set<string>([
   STORAGE_KEYS.foldersUiState,
   STORAGE_KEYS.quickAccessUiState,
   STORAGE_KEYS.folderChatNameDisplayOverrides,
-]);
+] as const;
+
+const ACCOUNT_OWNED_KEYS = new Set<string>(ACCOUNT_OWNED_STORAGE_KEYS);
 
 interface ScopedSubscription {
   listeners: Set<() => void>;

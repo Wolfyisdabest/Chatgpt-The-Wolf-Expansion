@@ -145,3 +145,13 @@ test("both frontends expose global display settings while account folder overrid
   assert.match(preferences, /Manage account-specific folder overrides inside ChatGPT/);
   assert.doesNotMatch(preferences, /id="folder-overrides-content"/);
 });
+
+test("in-ChatGPT settings exposes the explicit two-step legacy recovery action", () => {
+  const inChat = readFileSync(
+    path.join(process.cwd(), "src/features/settings/InChatSettingsFeature.ts"),
+    "utf8",
+  );
+  assert.match(inChat, /Restore previous Quick Access data/);
+  assert.match(inChat, /Confirm restore to this account/);
+  assert.match(inChat, /destination-not-empty/);
+});
