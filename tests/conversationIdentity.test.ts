@@ -161,3 +161,43 @@ test("detected metadata rejects unresolved and conflicting transitional titles",
     { title: "Stable title", url: "https://chatgpt.com/c/stable" },
   ]]);
 });
+
+test("a single changed duplicate supersedes the cached title during native row replacement", () => {
+  const detected = collectDetectedConversationMetadata([
+    {
+      conversationId: "renaming",
+      title: "Old title",
+      url: "/c/renaming",
+      titleResolved: true,
+    },
+    {
+      conversationId: "renaming",
+      title: "New title",
+      url: "/c/renaming",
+      titleResolved: true,
+    },
+  ], new Map([["renaming", "Old title"]]));
+
+  assert.deepEqual(detected.get("renaming"), {
+    title: "New title",
+    url: "https://chatgpt.com/c/renaming",
+  });
+});
+
+test("conflicting native candidates remain rejected without one cached-title successor", () => {
+  const detected = collectDetectedConversationMetadata([
+    {
+      conversationId: "ambiguous",
+      title: "First",
+      url: "/c/ambiguous",
+      titleResolved: true,
+    },
+    {
+      conversationId: "ambiguous",
+      title: "Second",
+      url: "/c/ambiguous",
+      titleResolved: true,
+    },
+  ], new Map([["ambiguous", "Neither"]]));
+  assert.equal(detected.has("ambiguous"), false);
+});

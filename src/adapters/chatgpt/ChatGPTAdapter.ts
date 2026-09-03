@@ -15,13 +15,20 @@ import {
 } from "./menuContext";
 import { CHATGPT_SELECTORS } from "./selectors";
 import {
+  resolveChatGPTAccountEvidence,
+  type ChatGPTAccountEvidence,
+} from "../../accounts/accountIdentity";
+import {
   getWolfRootInsertionIndex,
   type SidebarSectionKind,
 } from "./sidebarPlacement";
 import {
+  classifyNativeConversationMenuAction,
   resolveExactNativeConversationAction,
+  resolveUniqueNativeConversationMenuAction,
   type NativeConversationActionCandidate,
   type NativeConversationActionResult,
+  type NativeConversationMenuActionDescriptor,
 } from "./nativeConversationActions";
 
 export interface ConversationIdentity {
@@ -79,6 +86,27 @@ export interface ChatGPTAdapter {
     link: HTMLAnchorElement,
   ): ConversationActionInsertionTarget | null;
   openNativeConversationActions(conversationId: string): NativeConversationActionResult;
+  listNativeConversationMenuActions(menu: HTMLElement): NativeConversationMenuActionDescriptor[];
+  activateNativeConversationMenuAction(
+    menu: HTMLElement,
+    kind: NativeConversationMenuActionDescriptor["kind"],
+  ): boolean;
+  activateNativeConversationPinAction(
+    conversationId: string,
+    kind: "pin" | "unpin",
+  ): boolean;
+  hideNativeConversationMenuForProxy(menu: HTMLElement): void;
+  closeNativeConversationMenu(menu: HTMLElement): void;
+  getNativeConversationMenuActionKind(
+    menu: HTMLElement,
+    element: Element,
+  ): NativeConversationMenuActionDescriptor["kind"] | null;
+  prepareNativeRenameTracking(conversationId: string): boolean;
+  isNativeConversationRenameEditor(element: Element, conversationId: string): boolean;
+  readNativeConversationRenameDraft(element: Element, conversationId: string): string | null;
+  finishNativeRenameTracking(conversationId: string): void;
+  getAccountEvidence(): ChatGPTAccountEvidence;
+  watchAccountEvidence(callback: (evidence: ChatGPTAccountEvidence) => void): Unsubscribe;
   watchSidebar(callback: () => void): Unsubscribe;
   watchNavigation(callback: () => void): Unsubscribe;
   watchConversationMenus(callback: (context: ConversationMenuContext) => void): Unsubscribe;
@@ -89,6 +117,7 @@ const MENU_CONTEXT_MAX_AGE_MS = 3_000;
 
 export class DefaultChatGPTAdapter implements ChatGPTAdapter {
   private lastNativePinnedExpanded: boolean | null | undefined;
+  private readonly nativeRenameRows = new Map<string, HTMLElement>();
 
   public constructor(private readonly logger: Logger) {}
 
@@ -398,39 +427,20 @@ export class DefaultChatGPTAdapter implements ChatGPTAdapter {
     const matchingLinks = this.findConversationLinks().filter(
       (link) => this.getConversationIdFromUrl(link.href) === conversationId,
     );
-    const rowCandidates = new Map<HTMLElement, NativeConversationActionCandidate<HTMLElement>>();
-    for (const link of matchingLinks) {
-      let candidate = link.parentElement;
-      for (let depth = 0; candidate && candidate !== sidebar && depth < 8; depth += 1) {
-        const conversationIds = [...this.findConversationIdentitiesWithin(candidate).keys()];
-        if (conversationIds.length > 1) {
-          break;
-        }
-        if (conversationIds.length === 1 && conversationIds[0] === conversationId) {
-          const triggers = Array.from(
-            candidate.querySelectorAll<HTMLElement>(CHATGPT_SELECTORS.button),
-          ).filter(
-            (control) =>
-              !control.closest(`[${WOLF_ATTRIBUTE}]`) &&
-              this.isConversationMenuTrigger(control),
-          );
-          if (triggers.length > 0) {
-            rowCandidates.set(candidate, {
-              conversationIds,
-              triggers,
-              wolfOwned: isWolfElement(candidate),
-            });
-            break;
-          }
-        }
-        candidate = candidate.parentElement;
-      }
-    }
+    const rowCandidates = this.findExactNativeConversationRows(conversationId).map((row) => ({
+      conversationIds: [conversationId],
+      triggers: Array.from(
+        row.querySelectorAll<HTMLElement>("button[data-conversation-options-trigger]"),
+      ).filter((control) =>
+        !control.closest(`[${WOLF_ATTRIBUTE}]`) &&
+        control.getAttribute("data-conversation-options-trigger") === conversationId),
+      wolfOwned: isWolfElement(row),
+    } satisfies NativeConversationActionCandidate<HTMLElement>));
 
     const resolution = resolveExactNativeConversationAction(
       conversationId,
       matchingLinks.length,
-      [...rowCandidates.values()],
+      rowCandidates,
     );
     if (resolution.status === "unavailable") {
       return this.logNativeActionUnavailable(conversationId, resolution.reason);
@@ -450,6 +460,238 @@ export class DefaultChatGPTAdapter implements ChatGPTAdapter {
     trigger.click();
     this.logger.debug("Native menu trigger activation dispatched.", { conversationId });
     return { status: "delegated" };
+  }
+
+  public listNativeConversationMenuActions(
+    menu: HTMLElement,
+  ): NativeConversationMenuActionDescriptor[] {
+    const descriptors: NativeConversationMenuActionDescriptor[] = [];
+    const seenKinds = new Set<string>();
+    const ambiguousKinds = new Set<string>();
+    const candidates = Array.from(
+      menu.querySelectorAll<HTMLElement>(CHATGPT_SELECTORS.menuItem),
+    ).filter((item) => !item.closest(`[${WOLF_ATTRIBUTE}]`));
+    candidates.forEach((item) => {
+      const label = normalizeConversationTitle(
+        item.getAttribute("aria-label") || item.innerText || item.textContent || item.title,
+      );
+      const kind = classifyNativeConversationMenuAction(label);
+      if (!kind) {
+        return;
+      }
+      if (seenKinds.has(kind)) {
+        ambiguousKinds.add(kind);
+        return;
+      }
+      seenKinds.add(kind);
+      descriptors.push({
+        disabled: item.getAttribute("aria-disabled") === "true" ||
+          (item instanceof HTMLButtonElement && item.disabled),
+        kind,
+        label,
+      });
+    });
+    for (const kind of ambiguousKinds) {
+      this.logger.debug("Native conversation menu action rejected as ambiguous.", { kind });
+    }
+    const safeDescriptors = descriptors.filter((descriptor) => !ambiguousKinds.has(descriptor.kind));
+    return safeDescriptors;
+  }
+
+  public activateNativeConversationMenuAction(
+    menu: HTMLElement,
+    kind: NativeConversationMenuActionDescriptor["kind"],
+  ): boolean {
+    if (!menu.isConnected) {
+      return false;
+    }
+    const candidates = Array.from(
+      menu.querySelectorAll<HTMLElement>(CHATGPT_SELECTORS.menuItem),
+    ).map((item) => ({
+      disabled: item.getAttribute("aria-disabled") === "true" ||
+        (item instanceof HTMLButtonElement && item.disabled),
+      element: item,
+      kind: classifyNativeConversationMenuAction(
+        item.getAttribute("aria-label") || item.innerText || item.textContent || item.title,
+      ),
+      wolfOwned: item.closest(`[${WOLF_ATTRIBUTE}]`) !== null,
+    }));
+    const action = resolveUniqueNativeConversationMenuAction(kind, candidates);
+    if (!action?.isConnected) {
+      return false;
+    }
+    action.click();
+    return true;
+  }
+
+  public activateNativeConversationPinAction(
+    conversationId: string,
+    kind: "pin" | "unpin",
+  ): boolean {
+    const rows = this.findExactNativeConversationRows(conversationId);
+    if (rows.length !== 1) {
+      return false;
+    }
+    const expected = kind === "pin" ? /^Pin(?:\s|$)/iu : /^Unpin(?:\s|$)/iu;
+    const buttons = Array.from(rows[0]!.querySelectorAll<HTMLElement>(
+      'button[data-trailing-button]',
+    )).filter((button) =>
+      !button.closest(`[${WOLF_ATTRIBUTE}]`) &&
+      expected.test(button.getAttribute("aria-label")?.trim() ?? "") &&
+      button.getAttribute("aria-disabled") !== "true" &&
+      (!(button instanceof HTMLButtonElement) || !button.disabled));
+    if (buttons.length !== 1 || !buttons[0]!.isConnected) {
+      return false;
+    }
+    buttons[0]!.click();
+    return true;
+  }
+
+  public hideNativeConversationMenuForProxy(menu: HTMLElement): void {
+    menu.dataset.wolfNativeProxyMenu = "true";
+    menu.style.setProperty("visibility", "hidden", "important");
+    menu.style.setProperty("pointer-events", "none", "important");
+  }
+
+  public closeNativeConversationMenu(menu: HTMLElement): void {
+    if (!menu.isConnected) {
+      return;
+    }
+    menu.dispatchEvent(new KeyboardEvent("keydown", {
+      bubbles: true,
+      cancelable: true,
+      key: "Escape",
+    }));
+  }
+
+  public getNativeConversationMenuActionKind(
+    menu: HTMLElement,
+    element: Element,
+  ): NativeConversationMenuActionDescriptor["kind"] | null {
+    const item = element.closest<HTMLElement>(CHATGPT_SELECTORS.menuItem);
+    if (!item || !menu.contains(item) || item.closest(`[${WOLF_ATTRIBUTE}]`)) {
+      return null;
+    }
+    const label = item.getAttribute("aria-label") || item.innerText || item.textContent || item.title;
+    return classifyNativeConversationMenuAction(label);
+  }
+
+  public prepareNativeRenameTracking(conversationId: string): boolean {
+    const rows = this.findExactNativeConversationRows(conversationId);
+    if (rows.length !== 1) {
+      return false;
+    }
+    this.nativeRenameRows.set(conversationId, rows[0]!);
+    return true;
+  }
+
+  public isNativeConversationRenameEditor(
+    element: Element,
+    conversationId: string,
+  ): boolean {
+    if (element.closest(`[${WOLF_ATTRIBUTE}]`) || !this.findSidebar()?.contains(element)) {
+      return false;
+    }
+    if (!element.matches(CHATGPT_SELECTORS.nativeConversationRenameEditor)) {
+      return false;
+    }
+    const trackedRow = this.nativeRenameRows.get(conversationId);
+    if (trackedRow?.isConnected && trackedRow.contains(element)) {
+      return true;
+    }
+    const reference = this.findConversationNearElement(element);
+    return reference?.conversationId === conversationId;
+  }
+
+  public readNativeConversationRenameDraft(
+    element: Element,
+    conversationId: string,
+  ): string | null {
+    if (!this.isNativeConversationRenameEditor(element, conversationId)) {
+      return null;
+    }
+    if (element instanceof HTMLInputElement) {
+      return element.value;
+    }
+    return null;
+  }
+
+  public finishNativeRenameTracking(conversationId: string): void {
+    this.nativeRenameRows.delete(conversationId);
+  }
+
+  public getAccountEvidence(): ChatGPTAccountEvidence {
+    const profileButtons = Array.from(
+      document.querySelectorAll<HTMLElement>(CHATGPT_SELECTORS.accountProfileButton),
+    ).filter((element) => !element.closest(`[${WOLF_ATTRIBUTE}]`) &&
+      element.getAttribute("aria-hidden") !== "true" && !element.hidden);
+    const profile = profileButtons.find((element) => element.querySelector("img[src]")) ??
+      profileButtons[0] ?? null;
+    return resolveChatGPTAccountEvidence({
+      accountEmailText: document.querySelector<HTMLElement>(CHATGPT_SELECTORS.accountEmail)
+        ?.innerText ?? "",
+      accountUsernameText: document.querySelector<HTMLElement>(CHATGPT_SELECTORS.accountUsername)
+        ?.innerText ?? "",
+      baseUrl: window.location.href,
+      loggedOutControlVisible: Array.from(
+        document.querySelectorAll<HTMLElement>(CHATGPT_SELECTORS.loggedOutAuthControl),
+      ).some((element) => element.getAttribute("aria-hidden") !== "true" && !element.hidden),
+      profileImageSource: profile?.querySelector<HTMLImageElement>("img[src]")?.src.trim() ?? "",
+      profileLabel: profile?.getAttribute("aria-label") || profile?.innerText ||
+        profile?.textContent || "",
+      profilePresent: profile !== null,
+    });
+  }
+
+  public watchAccountEvidence(
+    callback: (evidence: ChatGPTAccountEvidence) => void,
+  ): Unsubscribe {
+    let scheduled = false;
+    const emit = (): void => {
+      if (scheduled) {
+        return;
+      }
+      scheduled = true;
+      queueMicrotask(() => {
+        scheduled = false;
+        callback(this.getAccountEvidence());
+      });
+    };
+    const accountSelector = [
+      CHATGPT_SELECTORS.accountProfileButton,
+      CHATGPT_SELECTORS.loggedOutAuthControl,
+      CHATGPT_SELECTORS.accountEmail,
+      CHATGPT_SELECTORS.accountUsername,
+    ].join(",");
+    const containsAccountEvidence = (node: Node): boolean =>
+      node instanceof Element &&
+      (node.matches(accountSelector) || node.querySelector(accountSelector) !== null);
+    const observer = new MutationObserver((mutations) => {
+      if (mutations.some((mutation) =>
+        containsAccountEvidence(mutation.target) ||
+        Array.from(mutation.addedNodes).some(containsAccountEvidence) ||
+        Array.from(mutation.removedNodes).some(containsAccountEvidence))) {
+        emit();
+      }
+    });
+    observer.observe(document.body, {
+      attributeFilter: [
+        "aria-hidden",
+        "aria-label",
+        "data-mobile-auth-entry-action",
+        "data-testid",
+        "hidden",
+        "src",
+      ],
+      attributes: true,
+      childList: true,
+      subtree: true,
+    });
+    window.addEventListener("pageshow", emit);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("pageshow", emit);
+    };
   }
 
   public watchSidebar(callback: () => void): Unsubscribe {
@@ -849,6 +1091,61 @@ export class DefaultChatGPTAdapter implements ChatGPTAdapter {
       this.logger.debug("Favorite aborted: no owning chat row; found 0 conversation links.");
     }
     return null;
+  }
+
+  private findExactConversationRow(
+    link: HTMLAnchorElement,
+    conversationId: string,
+  ): HTMLElement | null {
+    const sidebar = this.findSidebar();
+    let candidate = link.parentElement;
+    for (let depth = 0; candidate && candidate !== sidebar && depth < 8; depth += 1) {
+      const identities = this.findConversationIdentitiesWithin(candidate);
+      if (identities.size > 1) {
+        return null;
+      }
+      if (identities.size === 1 && identities.has(conversationId)) {
+        const hasNativeActions = Array.from(
+          candidate.querySelectorAll<HTMLElement>(CHATGPT_SELECTORS.button),
+        ).some((control) =>
+          !control.closest(`[${WOLF_ATTRIBUTE}]`) &&
+          (control.hasAttribute("data-trailing-button") ||
+            this.isConversationMenuTrigger(control)));
+        if (hasNativeActions) {
+          return candidate;
+        }
+      }
+      candidate = candidate.parentElement;
+    }
+    return null;
+  }
+
+  private findExactNativeConversationRows(conversationId: string): HTMLElement[] {
+    const sidebar = this.findSidebar();
+    if (!sidebar) {
+      return [];
+    }
+    const rows = new Set<HTMLElement>();
+    const triggers = Array.from(
+      sidebar.querySelectorAll<HTMLElement>("button[data-conversation-options-trigger]"),
+    ).filter((trigger) =>
+      !trigger.closest(`[${WOLF_ATTRIBUTE}]`) &&
+      trigger.getAttribute("data-conversation-options-trigger") === conversationId);
+    for (const trigger of triggers) {
+      let candidate = trigger.parentElement;
+      for (let depth = 0; candidate && candidate !== sidebar && depth < 8; depth += 1) {
+        const identities = this.findConversationIdentitiesWithin(candidate);
+        if (identities.size > 1) {
+          break;
+        }
+        if (identities.size === 1 && identities.has(conversationId)) {
+          rows.add(candidate);
+          break;
+        }
+        candidate = candidate.parentElement;
+      }
+    }
+    return [...rows];
   }
 
   private isConversationMenuTrigger(button: HTMLElement): boolean {

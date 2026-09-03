@@ -2,7 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
-import { resolveExactNativeConversationAction } from "../src/adapters/chatgpt/nativeConversationActions";
+import {
+  classifyNativeConversationMenuAction,
+  resolveExactNativeConversationAction,
+} from "../src/adapters/chatgpt/nativeConversationActions";
 
 test("exact conversation ID resolves its single native action trigger", () => {
   const trigger = { id: "native-menu" };
@@ -65,10 +68,58 @@ test("Quick Access actions delegate through the native trigger without navigatio
     path.join(process.cwd(), "src/features/quickAccess/QuickAccessSidebar.ts"),
     "utf8",
   );
-  assert.match(sidebar, /openNativeConversationActions\(chat\.conversationId\)/);
+  const integration = readFileSync(
+    path.join(process.cwd(), "src/features/quickAccess/QuickAccessMenuIntegration.ts"),
+    "utf8",
+  );
+  assert.match(sidebar, /onOpenConversationMenu\(conversation, button\)/);
+  assert.match(integration, /openNativeConversationActions\(normalized\.conversation\.conversationId\)/);
   assert.match(adapter, /trigger\.click\(\)/);
   assert.doesNotMatch(adapter, /(?:fetch|XMLHttpRequest|document\.cookie)\s*\(/);
   assert.doesNotMatch(sidebar, /location\.(?:assign|replace)|history\.(?:pushState|replaceState)/);
+});
+
+test("only supported ChatGPT-owned conversation actions are proxied", () => {
+  assert.equal(classifyNativeConversationMenuAction("Rename"), "rename");
+  assert.equal(classifyNativeConversationMenuAction("Pin chat"), "pin");
+  assert.equal(classifyNativeConversationMenuAction("Unpin"), "unpin");
+  assert.equal(classifyNativeConversationMenuAction("Archive"), "archive");
+  assert.equal(classifyNativeConversationMenuAction("Delete"), "delete");
+  assert.equal(classifyNativeConversationMenuAction("Share"), null);
+});
+
+test("sanitized native-menu evidence exposes semantic actions and a separate Wolf subtree", () => {
+  const html = readFileSync(
+    path.join(
+      process.cwd(),
+      "tests/fixtures/chatgpt-dom/chatgpt-native-conversation-menu-open.sanitized.html",
+    ),
+    "utf8",
+  );
+  const wolfRegionIndex = html.indexOf('data-wolf-expansion="quick-access-menu-actions"');
+  assert.ok(wolfRegionIndex > 0);
+  const nativeRegion = html.slice(0, wolfRegionIndex);
+  for (const label of ["Rename", "Pin chat", "Archive", "Delete"]) {
+    assert.match(nativeRegion, new RegExp(`\\b${label}\\b`, "u"));
+    assert.notEqual(classifyNativeConversationMenuAction(label), null);
+  }
+  assert.match(html.slice(wolfRegionIndex), /Remove from Quick Access/u);
+});
+
+test("Delete delegation stops at the native menuitem and leaves confirmation to ChatGPT", () => {
+  const dialog = readFileSync(
+    path.join(
+      process.cwd(),
+      "tests/fixtures/chatgpt-dom/chatgpt-delete-confirmation-dialog.sanitized.html",
+    ),
+    "utf8",
+  );
+  const integration = readFileSync(
+    path.join(process.cwd(), "src/features/quickAccess/QuickAccessMenuIntegration.ts"),
+    "utf8",
+  );
+  assert.match(dialog, /data-testid="delete-conversation-confirm-button"/u);
+  assert.doesNotMatch(integration, /delete-conversation-confirm-button/u);
 });
 
 test("native Rename remains menu-owned and no Wolf alias write is introduced", () => {
@@ -76,7 +127,7 @@ test("native Rename remains menu-owned and no Wolf alias write is introduced", (
     path.join(process.cwd(), "src/features/quickAccess/QuickAccessSidebar.ts"),
     "utf8",
   );
-  assert.doesNotMatch(sidebar, /renameConversation|conversationAlias|setConversationTitle/);
+  assert.doesNotMatch(sidebar, /(?:renameConversation|conversationAlias|setConversationTitle)\s*\(/);
 });
 
 test("existing native portal integration owns Wolf action injection and deduplicates containers", () => {

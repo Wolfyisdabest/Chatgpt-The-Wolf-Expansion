@@ -4,6 +4,26 @@ export type NativeConversationActionUnavailableReason =
   | "ambiguous"
   | "unsupported";
 
+export type NativeConversationMenuActionKind =
+  | "archive"
+  | "delete"
+  | "pin"
+  | "rename"
+  | "unpin";
+
+export interface NativeConversationMenuActionDescriptor {
+  disabled: boolean;
+  kind: NativeConversationMenuActionKind;
+  label: string;
+}
+
+export interface NativeConversationMenuActionCandidate<TElement> {
+  disabled: boolean;
+  element: TElement;
+  kind: NativeConversationMenuActionKind | null;
+  wolfOwned: boolean;
+}
+
 export type NativeConversationActionResult =
   | { status: "delegated" }
   | {
@@ -48,4 +68,42 @@ export function resolveExactNativeConversationAction<TTrigger>(
     return { status: "unavailable", reason: "ambiguous" };
   }
   return { status: "available", trigger: relevantCandidates[0]!.triggers[0]! };
+}
+
+export function classifyNativeConversationMenuAction(
+  label: string,
+): NativeConversationMenuActionKind | null {
+  const normalized = label.replace(/\s+/gu, " ").trim();
+  if (!normalized) {
+    return null;
+  }
+  if (/\brename\b/iu.test(normalized)) {
+    return "rename";
+  }
+  if (/\bunpin\b/iu.test(normalized)) {
+    return "unpin";
+  }
+  if (/\bpin\b/iu.test(normalized)) {
+    return "pin";
+  }
+  if (/\barchive\b/iu.test(normalized)) {
+    return "archive";
+  }
+  if (/\bdelete\b/iu.test(normalized)) {
+    return "delete";
+  }
+  return null;
+}
+
+export function resolveUniqueNativeConversationMenuAction<TElement>(
+  requestedKind: NativeConversationMenuActionKind,
+  candidates: readonly NativeConversationMenuActionCandidate<TElement>[],
+): TElement | null {
+  const matches = candidates.filter(
+    (candidate) =>
+      !candidate.wolfOwned &&
+      !candidate.disabled &&
+      candidate.kind === requestedKind,
+  );
+  return matches.length === 1 ? matches[0]!.element : null;
 }

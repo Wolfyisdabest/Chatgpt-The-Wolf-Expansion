@@ -9,6 +9,7 @@ import {
   type FolderRecord,
   type FoldersUiState,
   type QuickAccessUiState,
+  type LegacyAccountData,
   type WolfExpansionSettings,
 } from "./schemas";
 import type { KeyValueStorage } from "./StorageService";
@@ -83,6 +84,39 @@ export async function migrateStorage(storage: KeyValueStorage): Promise<void> {
       }
     : normalizeQuickAccessUiState(rawQuickAccessUiState);
 
+  const rawLegacyAccountData = await storage.get<unknown>(
+    STORAGE_KEYS.legacyAccountData,
+    undefined,
+  );
+  const legacyFolderChatNameDisplayOverrides = {
+    ...settings.folders.chatNameDisplayOverrides,
+  };
+  const shouldPreserveLegacyAccountData =
+    rawLegacyAccountData === undefined &&
+    (favorites.length > 0 || folders.length > 0 || folderMembership.length > 0 ||
+      Object.keys(legacyFolderChatNameDisplayOverrides).length > 0 ||
+      uiState.collapsed || foldersUiState.collapsed || quickAccessUiState.collapsed);
+  const legacyAccountData: LegacyAccountData | undefined =
+    shouldPreserveLegacyAccountData
+      ? {
+          preservedAt: Date.now(),
+          sourceSchemaVersion: typeof rawSchemaVersion === "number" ? rawSchemaVersion : null,
+          favorites,
+          uiState,
+          folders,
+          folderMembership,
+          foldersUiState,
+          quickAccessUiState,
+          folderChatNameDisplayOverrides: legacyFolderChatNameDisplayOverrides,
+        }
+      : undefined;
+  if (Object.keys(legacyFolderChatNameDisplayOverrides).length > 0) {
+    settings = {
+      ...settings,
+      folders: { ...settings.folders, chatNameDisplayOverrides: {} },
+    };
+  }
+
   const changes: Record<string, unknown> = {};
   if (rawSchemaVersion !== STORAGE_SCHEMA_VERSION) {
     changes[STORAGE_KEYS.schemaVersion] = STORAGE_SCHEMA_VERSION;
@@ -107,6 +141,9 @@ export async function migrateStorage(storage: KeyValueStorage): Promise<void> {
   }
   if (JSON.stringify(rawQuickAccessUiState) !== JSON.stringify(quickAccessUiState)) {
     changes[STORAGE_KEYS.quickAccessUiState] = quickAccessUiState;
+  }
+  if (legacyAccountData) {
+    changes[STORAGE_KEYS.legacyAccountData] = legacyAccountData;
   }
 
   if (Object.keys(changes).length > 0) {

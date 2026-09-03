@@ -11,6 +11,7 @@ import type {
   WolfExpansionSettings,
 } from "../../storage/schemas";
 import { FoldersRepository } from "../folders/FoldersRepository";
+import { FolderDisplayOverridesRepository } from "../folders/FolderDisplayOverridesRepository";
 
 export class InChatSettingsFeature implements Feature {
   public readonly id = "in-chat-settings";
@@ -22,12 +23,15 @@ export class InChatSettingsFeature implements Feature {
   private opener: HTMLElement | null = null;
   private stopWatchingSidebar: Unsubscribe | null = null;
   private stopWatchingFolders: Unsubscribe | null = null;
+  private stopWatchingFolderOverrides: Unsubscribe | null = null;
+  private folderChatNameDisplayOverrides: Record<string, ItemNameDisplayMode> = {};
   private readonly scheduleReconcile: () => void;
 
   public constructor(
     private readonly adapter: ChatGPTAdapter,
     private readonly settingsService: SettingsService,
     private readonly foldersRepository: FoldersRepository,
+    private readonly folderDisplayOverridesRepository: FolderDisplayOverridesRepository,
     private readonly sidebarRoot: WolfSidebarRoot,
     private readonly logger: Logger,
   ) {
@@ -49,6 +53,9 @@ export class InChatSettingsFeature implements Feature {
     this.stopWatchingFolders = this.foldersRepository.subscribe(() => {
       void this.renderFolderOverrides();
     });
+    this.stopWatchingFolderOverrides = this.folderDisplayOverridesRepository.subscribe(() => {
+      void this.renderFolderOverrides();
+    });
     this.reconcile();
     this.logger.debug("In-ChatGPT settings enabled.");
   }
@@ -63,6 +70,8 @@ export class InChatSettingsFeature implements Feature {
     this.stopWatchingSidebar = null;
     this.stopWatchingFolders?.();
     this.stopWatchingFolders = null;
+    this.stopWatchingFolderOverrides?.();
+    this.stopWatchingFolderOverrides = null;
     this.close();
     if (this.entry) {
       this.sidebarRoot.unmount("settings", this.entry);
@@ -73,6 +82,11 @@ export class InChatSettingsFeature implements Feature {
 
   public destroy(): void {
     this.disable();
+  }
+
+  public resetAccountContext(): void {
+    this.folderChatNameDisplayOverrides = {};
+    this.close();
   }
 
   private reconcile(): void {
@@ -282,7 +296,14 @@ export class InChatSettingsFeature implements Feature {
     if (!content || content.hidden || !this.settings) {
       return;
     }
-    const folders = await this.foldersRepository.listFolders();
+    const [folders, overrides] = await Promise.all([
+      this.foldersRepository.listFolders(),
+      this.folderDisplayOverridesRepository.get(),
+    ]);
+    if (!content.isConnected) {
+      return;
+    }
+    this.folderChatNameDisplayOverrides = overrides;
     content.replaceChildren();
     if (folders.length === 0) {
       const empty = document.createElement("p");
@@ -291,7 +312,7 @@ export class InChatSettingsFeature implements Feature {
       content.append(empty);
       return;
     }
-    if (Object.keys(this.settings.folders.chatNameDisplayOverrides).length === 0) {
+    if (Object.keys(overrides).length === 0) {
       const inherited = document.createElement("p");
       inherited.className = "wolf-folder-override-empty";
       inherited.textContent = "All folders currently inherit the default.";
@@ -323,7 +344,7 @@ export class InChatSettingsFeature implements Feature {
       option.textContent = label;
       select.append(option);
     }
-    select.value = this.settings?.folders.chatNameDisplayOverrides[folder.id] ?? "inherit";
+    select.value = this.folderChatNameDisplayOverrides[folder.id] ?? "inherit";
     select.addEventListener("change", (event) => {
       event.stopPropagation();
       const mode: ItemNameDisplayMode | null = select.value === "compact" || select.value === "full"
@@ -339,7 +360,7 @@ export class InChatSettingsFeature implements Feature {
     mode: ItemNameDisplayMode | null,
   ): Promise<void> {
     try {
-      this.settings = await this.settingsService.setFolderChatNameDisplay(folderId, mode);
+      await this.folderDisplayOverridesRepository.set(folderId, mode);
       await this.renderFolderOverrides();
       this.setStatus("Folder display override saved.");
     } catch (error) {

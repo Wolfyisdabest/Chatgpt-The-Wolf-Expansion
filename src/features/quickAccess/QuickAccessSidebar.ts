@@ -2,7 +2,6 @@ import type {
   ChatGPTAdapter,
   ConversationReference,
 } from "../../adapters/chatgpt/ChatGPTAdapter";
-import type { NativeConversationActionUnavailableReason } from "../../adapters/chatgpt/nativeConversationActions";
 import { normalizeConversationIdentity, type NormalizedConversationIdentity } from "../../adapters/chatgpt/conversationIdentity";
 import type { Logger } from "../../core/logger";
 import type { WolfSidebarRoot } from "../../core/WolfSidebarRoot";
@@ -33,8 +32,9 @@ import {
   ITEM_NAME_RESET_DURATION_MS,
   ITEM_NAME_REVEAL_DELAY_MS,
   getItemNameOverflowState,
+  getItemNameReadableViewport,
+  getItemNameRevealWidth,
   getItemNameSemantics,
-  getUnobscuredItemNameWidth,
 } from "./itemNameDisplay";
 import {
   getChevronPresentation,
@@ -69,6 +69,10 @@ interface QuickAccessSidebarCallbacks {
   onRemoveConversationFromFolder(conversationId: string): Promise<void>;
   onReorderFolderChats(folderId: string, conversationIds: string[]): Promise<void>;
   onDebugToggleCurrentConversation(): Promise<void>;
+  onOpenConversationMenu(
+    conversation: NormalizedConversationIdentity,
+    anchor: HTMLElement,
+  ): void;
 }
 
 type ChatDragKind = "native-chat" | "quick-access-chat" | "folder-chat";
@@ -107,12 +111,12 @@ export class QuickAccessSidebar {
   private projection: QuickAccessProjection = { folders: [], looseChats: [], visible: false };
   private settings: WolfExpansionSettings | null = null;
   private collapsed = false;
-  private currentConversationIsQuickAccess = false;
+  private currentConversationId: string | null = null;
+  private readonly titlePreviews = new Map<string, string>();
   private lastRenderSignature: string | null = null;
   private readonly conversations = new Map<string, NormalizedConversationIdentity>();
   private readonly nativeDraggableStates = new Map<HTMLElement, string | null>();
   private folderMenuGuardInstalled = false;
-  private nativeActionStatusTimeout: number | null = null;
 
   public constructor(
     private readonly adapter: ChatGPTAdapter,
@@ -125,12 +129,12 @@ export class QuickAccessSidebar {
     projection: QuickAccessProjection,
     settings: WolfExpansionSettings,
     collapsed: boolean,
-    currentConversationIsQuickAccess: boolean,
+    currentConversationId: string | null,
   ): void {
     this.projection = projection;
     this.settings = settings;
     this.collapsed = collapsed;
-    this.currentConversationIsQuickAccess = currentConversationIsQuickAccess;
+    this.currentConversationId = currentConversationId;
     this.conversations.clear();
     collectProjectionConversations(projection, this.conversations);
     const editorSnapshot = this.captureActiveEditor();
@@ -144,7 +148,7 @@ export class QuickAccessSidebar {
       projection,
       settings,
       collapsed,
-      currentConversationIsQuickAccess,
+      currentConversationId,
     );
     if (this.lastRenderSignature === renderSignature && section.childElementCount > 0) {
       this.finishEditorReconciliation(editorSnapshot);
@@ -193,7 +197,7 @@ export class QuickAccessSidebar {
       const debug = createWolfElement("button", "debug-quick-access-current");
       debug.type = "button";
       debug.className = "wolf-debug-quick-access-current";
-      debug.textContent = `Debug: ${currentConversationIsQuickAccess ? "Remove current chat from" : "Add current chat to"} Quick Access`;
+      debug.textContent = `Debug: ${currentConversationId && this.conversations.has(currentConversationId) ? "Remove current chat from" : "Add current chat to"} Quick Access`;
       debug.disabled = currentConversationId === null;
       debug.addEventListener("click", () => void this.runSafely(
         this.callbacks.onDebugToggleCurrentConversation,
@@ -246,12 +250,6 @@ export class QuickAccessSidebar {
     status.setAttribute("role", "status");
     status.setAttribute("aria-live", "polite");
     section.append(status);
-    const nativeActionStatus = createWolfElement("p", "native-action-status");
-    nativeActionStatus.className = "wolf-native-action-status";
-    nativeActionStatus.hidden = true;
-    nativeActionStatus.setAttribute("role", "status");
-    nativeActionStatus.setAttribute("aria-live", "polite");
-    section.append(nativeActionStatus);
     this.lastRenderSignature = renderSignature;
     this.finishEditorReconciliation(editorSnapshot);
     this.syncFolderMenuOutsideGuard();
@@ -346,10 +344,7 @@ export class QuickAccessSidebar {
     this.editorMode = null;
     this.removeFolderMenuOutsideGuard();
     this.cancelNameEditor(false);
-    if (this.nativeActionStatusTimeout !== null) {
-      window.clearTimeout(this.nativeActionStatusTimeout);
-      this.nativeActionStatusTimeout = null;
-    }
+    this.titlePreviews.clear();
   }
 
   private appendHierarchyRegions(
@@ -483,7 +478,8 @@ export class QuickAccessSidebar {
     index: number,
     siblingCount: number,
   ): HTMLElement {
-    const nameSemantics = getItemNameSemantics(chat.title);
+    const displayedTitle = this.titlePreviews.get(chat.conversationId) ?? chat.title;
+    const nameSemantics = getItemNameSemantics(displayedTitle);
     const item = createWolfElement("div", "quick-access-chat");
     item.className = "wolf-quick-access-chat";
     item.dataset.conversationId = chat.conversationId;
@@ -492,6 +488,8 @@ export class QuickAccessSidebar {
     item.dataset.isQuickAccess = String(chat.isQuickAccess);
     item.dataset.hasParent = String(depth > 0);
     item.dataset.itemNameDisplay = chat.nameDisplayMode;
+    const isCurrent = chat.conversationId === this.currentConversationId;
+    item.classList.toggle("wolf-is-current-conversation", isCurrent);
     this.applyTreeBranchMetadata(item, chat.branch);
     item.draggable = true;
     const hierarchyLayout = getQuickAccessHierarchyLayout(depth, "chat");
@@ -506,6 +504,9 @@ export class QuickAccessSidebar {
     link.append(this.createItemNameViewport(nameSemantics.visibleText, chat.nameDisplayMode));
     link.title = nameSemantics.tooltip;
     link.setAttribute("aria-label", nameSemantics.accessibleName);
+    if (isCurrent) {
+      link.setAttribute("aria-current", "page");
+    }
     const controls = document.createElement("span");
     controls.className = "wolf-quick-access-controls";
     if (chat.folderId) {
@@ -586,60 +587,21 @@ export class QuickAccessSidebar {
     const label = `Actions for ${chat.title}`;
     const button = this.createIconButton("more", label);
     button.dataset.nativeConversationActions = chat.conversationId;
+    button.setAttribute("aria-haspopup", "menu");
     button.addEventListener("click", (event) => {
       event.preventDefault();
       event.stopPropagation();
       event.stopImmediatePropagation();
-      const result = this.adapter.openNativeConversationActions(chat.conversationId);
-      if (result.status === "delegated") {
-        button.title = label;
-        this.clearNativeActionStatus();
+      const conversation = this.conversations.get(chat.conversationId);
+      if (!conversation) {
+        this.logger.debug("Local Quick Access menu aborted: conversation identity unavailable.", {
+          conversationId: chat.conversationId,
+        });
         return;
       }
-      button.title = "ChatGPT actions unavailable for this chat right now.";
-      this.showNativeActionUnavailable(result.reason);
+      this.callbacks.onOpenConversationMenu(conversation, button);
     });
     return button;
-  }
-
-  private showNativeActionUnavailable(
-    reason: NativeConversationActionUnavailableReason,
-  ): void {
-    const status = this.section?.querySelector<HTMLElement>(
-      '[data-wolf-expansion="native-action-status"]',
-    );
-    if (!status) {
-      return;
-    }
-    status.textContent = "ChatGPT actions unavailable for this chat right now.";
-    status.hidden = false;
-    status.dataset.reason = reason;
-    if (this.nativeActionStatusTimeout !== null) {
-      window.clearTimeout(this.nativeActionStatusTimeout);
-    }
-    this.nativeActionStatusTimeout = window.setTimeout(() => {
-      if (status.isConnected) {
-        status.hidden = true;
-        status.textContent = "";
-        delete status.dataset.reason;
-      }
-      this.nativeActionStatusTimeout = null;
-    }, 3_000);
-  }
-
-  private clearNativeActionStatus(): void {
-    if (this.nativeActionStatusTimeout !== null) {
-      window.clearTimeout(this.nativeActionStatusTimeout);
-      this.nativeActionStatusTimeout = null;
-    }
-    const status = this.section?.querySelector<HTMLElement>(
-      '[data-wolf-expansion="native-action-status"]',
-    );
-    if (status) {
-      status.hidden = true;
-      status.textContent = "";
-      delete status.dataset.reason;
-    }
   }
 
   private createInsertionTarget(
@@ -1122,6 +1084,38 @@ export class QuickAccessSidebar {
       });
   }
 
+  public setConversationTitlePreview(conversationId: string, draft: string): void {
+    this.titlePreviews.set(conversationId, draft);
+    this.updateRenderedConversationTitle(conversationId, draft);
+  }
+
+  public clearConversationTitlePreview(conversationId: string): void {
+    this.titlePreviews.delete(conversationId);
+    const canonical = this.conversations.get(conversationId);
+    if (canonical) {
+      this.updateRenderedConversationTitle(conversationId, canonical.title);
+    }
+  }
+
+  private updateRenderedConversationTitle(conversationId: string, title: string): void {
+    const row = this.section?.querySelector<HTMLElement>(
+      `[data-wolf-expansion="quick-access-chat"][data-conversation-id="${CSS.escape(conversationId)}"]`,
+    );
+    const link = row?.querySelector<HTMLAnchorElement>(
+      '[data-wolf-expansion="quick-access-chat-link"]',
+    );
+    const viewport = link?.querySelector<HTMLElement>(".wolf-item-name-viewport");
+    const text = viewport?.querySelector<HTMLElement>(".wolf-item-name-text");
+    if (!link || !viewport || !text) {
+      return;
+    }
+    text.textContent = title;
+    viewport.title = title;
+    link.title = title;
+    link.setAttribute("aria-label", title);
+    viewport.dispatchEvent(new Event("wolf-title-reset"));
+  }
+
   private createItemNameViewport(
     value: string,
     displayMode: ItemNameDisplayMode,
@@ -1156,6 +1150,17 @@ export class QuickAccessSidebar {
       text.style.removeProperty("--wolf-name-reset-duration");
     };
 
+    const resetReveal = (): void => {
+      pointerInside = false;
+      clearRevealTimeout();
+      clearResetTimeout();
+      delete viewport.dataset.overflowing;
+      delete viewport.dataset.revealActive;
+      delete viewport.dataset.revealReturning;
+      clearRevealGeometry();
+    };
+    viewport.addEventListener("wolf-title-reset", resetReveal);
+
     viewport.addEventListener("pointerenter", () => {
       pointerInside = true;
       clearRevealTimeout();
@@ -1164,10 +1169,14 @@ export class QuickAccessSidebar {
       if (viewport.dataset.itemNameDisplay !== "compact") {
         return;
       }
-      const availableWidth = this.getItemNameRevealWidth(viewport);
+      const readableViewport = this.measureItemNameViewport(viewport);
       const overflowState = getItemNameOverflowState(
         text.scrollWidth,
-        availableWidth,
+        getItemNameRevealWidth(
+          viewport.clientWidth,
+          readableViewport.inlineEndOcclusion,
+          false,
+        ),
         window.matchMedia("(prefers-reduced-motion: reduce)").matches,
       );
       if (overflowState.overflowing) {
@@ -1175,27 +1184,43 @@ export class QuickAccessSidebar {
       } else {
         delete viewport.dataset.overflowing;
       }
-      const metrics = overflowState.revealMetrics;
-      if (!metrics) {
+      if (!overflowState.revealMetrics) {
         delete viewport.dataset.revealActive;
         delete viewport.dataset.revealReturning;
         clearRevealGeometry();
         return;
       }
-      text.style.setProperty(
-        "--wolf-name-scroll-distance",
-        `${metrics.distancePixels}px`,
-      );
-      text.style.setProperty(
-        "--wolf-name-scroll-duration",
-        `${metrics.durationSeconds}s`,
-      );
       revealTimeoutId = window.setTimeout(() => {
         revealTimeoutId = undefined;
         if (!pointerInside || !viewport.isConnected) {
           return;
         }
         viewport.dataset.revealActive = "true";
+        window.requestAnimationFrame(() => {
+          if (!pointerInside || !viewport.isConnected ||
+            viewport.dataset.revealActive !== "true") {
+            return;
+          }
+          const activeMetrics = getItemNameOverflowState(
+            text.scrollWidth,
+            getItemNameRevealWidth(viewport.clientWidth, 0, true),
+            false,
+          ).revealMetrics;
+          if (!activeMetrics) {
+            delete viewport.dataset.revealActive;
+            delete viewport.dataset.overflowing;
+            clearRevealGeometry();
+            return;
+          }
+          text.style.setProperty(
+            "--wolf-name-scroll-distance",
+            `${activeMetrics.distancePixels}px`,
+          );
+          text.style.setProperty(
+            "--wolf-name-scroll-duration",
+            `${activeMetrics.durationSeconds}s`,
+          );
+        });
       }, ITEM_NAME_REVEAL_DELAY_MS);
     });
     viewport.addEventListener("pointerleave", () => {
@@ -1222,21 +1247,34 @@ export class QuickAccessSidebar {
     return viewport;
   }
 
-  private getItemNameRevealWidth(viewport: HTMLElement): number {
+  private measureItemNameViewport(
+    viewport: HTMLElement,
+  ): ReturnType<typeof getItemNameReadableViewport> {
     const row = viewport.closest<HTMLElement>(
       ".wolf-quick-access-folder-row, .wolf-quick-access-chat",
     );
     const controls = row?.querySelector<HTMLElement>(".wolf-quick-access-controls") ?? null;
     if (!controls) {
-      return viewport.clientWidth;
+      return getItemNameReadableViewport(
+        viewport.clientWidth,
+        0,
+        viewport.clientWidth,
+        viewport.clientWidth,
+        viewport.clientWidth,
+        "ltr",
+      );
     }
     const viewportRect = viewport.getBoundingClientRect();
     const controlsRect = controls.getBoundingClientRect();
     const direction = window.getComputedStyle(viewport).direction;
-    const inlineEndOcclusion = direction === "rtl"
-      ? Math.max(0, controlsRect.right - viewportRect.left)
-      : Math.max(0, viewportRect.right - controlsRect.left);
-    return getUnobscuredItemNameWidth(viewport.clientWidth, inlineEndOcclusion);
+    return getItemNameReadableViewport(
+      viewport.clientWidth,
+      viewportRect.left,
+      viewportRect.right,
+      controlsRect.left,
+      controlsRect.right,
+      direction === "rtl" ? "rtl" : "ltr",
+    );
   }
 
   private createNameEditor(
@@ -1823,7 +1861,7 @@ export class QuickAccessSidebar {
         this.projection,
         this.settings,
         this.collapsed,
-        this.currentConversationIsQuickAccess,
+        this.currentConversationId,
       );
     }
   }
@@ -1832,7 +1870,7 @@ export class QuickAccessSidebar {
     projection: QuickAccessProjection,
     settings: WolfExpansionSettings,
     collapsed: boolean,
-    currentConversationIsQuickAccess: boolean,
+    currentConversationId: string | null,
   ): string {
     const editor = this.nameEditor.activeState;
     const editorIdentity = editor?.kind === "rename"
@@ -1848,7 +1886,8 @@ export class QuickAccessSidebar {
         folders: settings.folders,
       },
       collapsed,
-      currentConversationIsQuickAccess,
+      currentConversationId,
+      titlePreviews: [...this.titlePreviews],
       editorIdentity,
       editorMode: this.editorMode,
     });

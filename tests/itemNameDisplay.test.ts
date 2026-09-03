@@ -4,6 +4,8 @@ import {
   getItemNameRevealPresentation,
   getItemNamePresentation,
   getItemNameOverflowState,
+  getItemNameReadableViewport,
+  getItemNameRevealWidth,
   getItemNameSemantics,
   getOverflowRevealMetrics,
   getUnobscuredItemNameWidth,
@@ -104,7 +106,9 @@ test("overflow reveal duration scales but remains bounded", () => {
 
 test("hover reveal uses the exact overflow geometry and disables its fade", () => {
   assert.deepEqual(getItemNameRevealPresentation(237, 101, false, "revealing"), {
+    controlsSuppressed: true,
     fadeVisible: false,
+    usesFullWidth: true,
     translatePixels: 136,
   });
 });
@@ -113,29 +117,65 @@ test("hover reveal geometry excludes the measured action-control overlap", () =>
   const readableWidth = getUnobscuredItemNameWidth(140, 36);
   assert.equal(readableWidth, 104);
   assert.deepEqual(getItemNameRevealPresentation(237, readableWidth, false, "revealing"), {
+    controlsSuppressed: true,
     fadeVisible: false,
+    usesFullWidth: true,
     translatePixels: 133,
   });
 });
 
+test("readable viewport clips only the physical action overlap", () => {
+  assert.deepEqual(
+    getItemNameReadableViewport(180, 20, 200, 152, 198, "ltr"),
+    {
+      clientWidth: 132,
+      clipLeftPixels: 0,
+      clipRightPixels: 48,
+      inlineEndOcclusion: 48,
+    },
+  );
+  assert.deepEqual(
+    getItemNameReadableViewport(180, 20, 200, 22, 68, "rtl"),
+    {
+      clientWidth: 132,
+      clipLeftPixels: 48,
+      clipRightPixels: 0,
+      inlineEndOcclusion: 48,
+    },
+  );
+});
+
 test("pointer-leave return keeps the fade disabled until transform reset", () => {
   assert.deepEqual(getItemNameRevealPresentation(237, 101, false, "returning"), {
+    controlsSuppressed: true,
     fadeVisible: false,
+    usesFullWidth: true,
     translatePixels: 0,
   });
   assert.deepEqual(getItemNameRevealPresentation(237, 101, false, "idle"), {
+    controlsSuppressed: false,
     fadeVisible: true,
+    usesFullWidth: false,
     translatePixels: 0,
   });
 });
 
+test("active Compact reveal suppresses controls and uses full-width geometry", () => {
+  assert.equal(getItemNameRevealWidth(180, 48, false), 132);
+  assert.equal(getItemNameRevealWidth(180, 48, true), 180);
+});
+
 test("no overflow and reduced motion never enter an automated reveal state", () => {
   assert.deepEqual(getItemNameRevealPresentation(80, 100, false, "revealing"), {
+    controlsSuppressed: false,
     fadeVisible: false,
+    usesFullWidth: false,
     translatePixels: 0,
   });
   assert.deepEqual(getItemNameRevealPresentation(237, 101, true, "revealing"), {
+    controlsSuppressed: false,
     fadeVisible: true,
+    usesFullWidth: false,
     translatePixels: 0,
   });
 });

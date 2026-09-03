@@ -1,4 +1,4 @@
-export const STORAGE_SCHEMA_VERSION = 6;
+export const STORAGE_SCHEMA_VERSION = 7;
 
 export type ItemNameDisplayMode = "compact" | "full";
 
@@ -11,6 +11,8 @@ export const STORAGE_KEYS = {
   folderMembership: "wolfExpansion.folderMembership",
   foldersUiState: "wolfExpansion.foldersUiState",
   quickAccessUiState: "wolfExpansion.quickAccessUiState",
+  folderChatNameDisplayOverrides: "wolfExpansion.folderChatNameDisplayOverrides",
+  legacyAccountData: "wolfExpansion.legacyAccountData",
 } as const;
 
 export interface FavoriteConversation {
@@ -49,6 +51,18 @@ export interface FoldersUiState {
 
 export interface QuickAccessUiState {
   collapsed: boolean;
+}
+
+export interface LegacyAccountData {
+  preservedAt: number;
+  sourceSchemaVersion: number | null;
+  favorites: FavoriteConversation[];
+  uiState: FavoritesUiState;
+  folders: FolderRecord[];
+  folderMembership: FolderConversationMembership[];
+  foldersUiState: FoldersUiState;
+  quickAccessUiState: QuickAccessUiState;
+  folderChatNameDisplayOverrides: Record<string, ItemNameDisplayMode>;
 }
 
 export interface WolfExpansionSettings {

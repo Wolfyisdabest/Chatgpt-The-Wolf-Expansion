@@ -6,7 +6,7 @@ import {
   normalizeFolderMembership,
   normalizeFolders,
   normalizeFoldersUiState,
-  normalizeSettings,
+  normalizeFolderChatNameDisplayOverrides,
 } from "../../storage/migrations";
 import {
   STORAGE_KEYS,
@@ -138,17 +138,15 @@ export class FoldersRepository {
       const memberships = (await this.listMembership()).filter(
         (membership) => membership.folderId !== folderId,
       );
-      const settings = normalizeSettings(
-        await this.storage.get<unknown>(STORAGE_KEYS.settings, undefined),
+      const chatNameDisplayOverrides = normalizeFolderChatNameDisplayOverrides(
+        await this.storage.get<unknown>(STORAGE_KEYS.folderChatNameDisplayOverrides, {}),
       );
-      const chatNameDisplayOverrides = {
-        ...settings.folders.chatNameDisplayOverrides,
-      };
       delete chatNameDisplayOverrides[folderId];
-      await this.saveFoldersAndMembership(retainedFolders, memberships, {
-        ...settings,
-        folders: { ...settings.folders, chatNameDisplayOverrides },
-      });
+      await this.saveFoldersAndMembership(
+        retainedFolders,
+        memberships,
+        chatNameDisplayOverrides,
+      );
       this.emitChanged({ type: "deleted", folderId });
       this.logger?.debug("Folder deleted; direct conversations unfiled and subfolders preserved.", {
         folderId,
@@ -387,6 +385,10 @@ export class FoldersRepository {
     };
   }
 
+  public async whenIdle(): Promise<void> {
+    await this.operationQueue;
+  }
+
   private createUniqueId(folders: readonly FolderRecord[]): string {
     const existingIds = new Set(folders.map((folder) => folder.id));
     for (let attempt = 0; attempt < 10; attempt += 1) {
@@ -415,7 +417,7 @@ export class FoldersRepository {
   private async saveFoldersAndMembership(
     folders: FolderRecord[],
     memberships: FolderConversationMembership[],
-    settings?: ReturnType<typeof normalizeSettings>,
+    folderChatNameDisplayOverrides?: Record<string, "compact" | "full">,
   ): Promise<void> {
     const normalizedFolders = normalizeFolders(folders);
     await this.storage.setMany({
@@ -424,7 +426,9 @@ export class FoldersRepository {
         memberships,
         new Set(normalizedFolders.map((folder) => folder.id)),
       ),
-      ...(settings ? { [STORAGE_KEYS.settings]: settings } : {}),
+      ...(folderChatNameDisplayOverrides
+        ? { [STORAGE_KEYS.folderChatNameDisplayOverrides]: folderChatNameDisplayOverrides }
+        : {}),
     });
   }
 

@@ -78,6 +78,7 @@ form {
   font-size: 0.85rem;
   margin: 0.25rem 0 0.55rem;
   opacity: 0.65;
+  padding-inline: 0.25rem;
 }
 
 .setting-row {

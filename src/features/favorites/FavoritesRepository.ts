@@ -199,6 +199,10 @@ export class FavoritesRepository {
     };
   }
 
+  public async whenIdle(): Promise<void> {
+    await this.operationQueue;
+  }
+
   private async save(favorites: FavoriteConversation[]): Promise<void> {
     const normalized = favorites.map((favorite, sortIndex) => ({ ...favorite, sortIndex }));
     this.logger?.debug("Favorite pipeline: browser.storage.local write started.", {

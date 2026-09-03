@@ -771,6 +771,211 @@ Even if automatic local cloud-folder sync is delayed or not implemented immediat
 
 ---
 
+# 
+
+```
+# 27A. Multi-Account / Account Switching
+
+Wolf Expansion may provide optional multi-account support for ChatGPT, inspired by account-switching extensions such as RoSeal.
+
+This feature must remain optional. Wolf Expansion itself does **not** require a separate extension account.
+
+## Goals
+
+Allow the user to keep multiple ChatGPT accounts available and switch between them without repeatedly logging out and manually signing back in.
+
+Planned features:
+
+- Multiple saved account slots.
+- One-click account switching.
+- Account-specific display name/avatar where safely available.
+- Clear indication of which ChatGPT account is currently active.
+- Add a currently signed-in ChatGPT account as an account slot.
+- Remove an individual account slot without affecting other saved accounts.
+- Log out an individual account.
+- Optional account ordering.
+- Optional account nicknames for easier identification.
+- Account-management UI in Wolf Expansion settings.
+- Quick account switcher accessible from ChatGPT where practical.
+- Support many account slots.
+- Initial design target of up to roughly 100 account slots where browser capabilities permit.
+- No artificial paid/account-count limits imposed by Wolf Expansion.
+
+## Session Isolation
+
+Do not implement account switching by copying raw ChatGPT authentication tokens into normal Wolf Expansion storage.
+
+Prefer browser-supported isolation.
+
+For Firefox/Floorp, a likely architecture is:
+
+```text
+Wolf Expansion Account Manager
+│
+├── Account Slot A
+│   ├── isolated browser/container session
+│   └── Wolf account scope A
+│
+├── Account Slot B
+│   ├── isolated browser/container session
+│   └── Wolf account scope B
+│
+└── Account Slot C
+    ├── isolated browser/container session
+    └── Wolf account scope C
+```
+
+Possible technologies:
+
+- Firefox contextual identities / containers.
+- Separate browser cookie stores.
+- Browser-supported session isolation.
+
+The browser should retain the actual ChatGPT login session where possible.
+
+Wolf Expansion should retain only the metadata needed to associate an account slot with its isolated browser session.
+
+Do not persist:
+
+- ChatGPT access tokens.
+- ChatGPT session tokens.
+- Authentication headers.
+- Copied login cookies inside normal extension metadata.
+- Private API credentials.
+
+## Account-Scoped Wolf Data
+
+All ChatGPT-account-specific Wolf Expansion data must remain isolated between accounts.
+
+Examples:
+
+- Quick Access membership.
+- Folders and subfolders.
+- Conversation metadata.
+- Tags.
+- Notes.
+- Message bookmarks.
+- Trash state.
+- Prompt/chat-specific metadata.
+- Account-specific sidebar state.
+- Account-specific organizational settings where appropriate.
+- Search/index metadata tied to conversations.
+- AI-generated metadata tied to conversations.
+
+Example:
+
+```
+Account A
+├── Quick Access A
+├── Folders A
+└── Tags A
+
+Account B
+├── Quick Access B
+├── Folders B
+└── Tags B
+```
+
+Account B must never display Account A's conversation-specific data.
+
+## Logged-Out State
+
+When ChatGPT is logged out:
+
+- Do not display conversation-specific Quick Access data from the previously active account.
+- Do not expose folders containing inaccessible conversations.
+- Do not delete the previous account's Wolf metadata merely because the user logged out.
+- Global Wolf Expansion settings may remain available.
+- Account-specific data should return when the matching account becomes active again.
+
+If the active ChatGPT account cannot be identified safely and confidently:
+
+**fail closed and do not display account-owned conversation data.**
+
+## Account Switching
+
+Switching accounts should:
+
+1. Resolve the requested saved account slot.
+2. Open/switch to its isolated ChatGPT browser session.
+3. Reset transient Wolf Expansion state from the previous account.
+4. Load the selected account's Wolf metadata scope.
+5. Reconcile that account's currently available conversations.
+6. Render only data belonging to that account.
+
+Transient state that must not cross account boundaries includes:
+
+- Open Wolf menus.
+- Native action targets.
+- Rename drafts.
+- Active conversation state.
+- Drag/drop state.
+- Temporary title previews.
+- Pending native-menu delegation.
+
+No account switch should briefly render the previous account's Quick Access data.
+
+## Data Safety
+
+Account identity must be treated separately from conversation identity.
+
+Conceptually:
+
+```
+account scope
+    └── conversation ID
+            └── Wolf metadata
+```
+
+A conversation ID by itself must not be assumed to belong to whichever account happens to be active.
+
+Account removal should not silently destroy local Wolf data unless the user explicitly chooses to remove that account's stored extension data.
+
+Where practical, offer separate choices such as:
+
+```
+Remove account session
+Remove account session + Wolf data
+```
+
+Destructive account-data removal must require confirmation.
+
+## Backup and Sync
+
+Backup/export should preserve account boundaries.
+
+Example:
+
+```
+WolfExpansion/
+├── global/
+├── accounts/
+│   ├── <account-scope-a>/
+│   └── <account-scope-b>/
+└── devices/
+```
+
+Local Cloud Folder Sync must not merge conversation metadata from different ChatGPT accounts into one undifferentiated namespace.
+
+Account/session credentials themselves should not be included in normal Wolf Expansion backups or cloud-folder synchronization.
+
+## Privacy
+
+Multi-account support must preserve the existing Wolf Expansion privacy principles:
+
+- No Wolf Expansion account required.
+- No extension-operated account server.
+- No mandatory cloud service.
+- No telemetry requirement.
+- No advertising.
+- No selling or sharing account-session data.
+- No private ChatGPT API dependency.
+- No raw authentication-token storage for account switching.
+
+The feature should use browser-supported session isolation wherever practical.
+
+---
+
 # 28. Privacy Controls
 
 Planned privacy page/status display.

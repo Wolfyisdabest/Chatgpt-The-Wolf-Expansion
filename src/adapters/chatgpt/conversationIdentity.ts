@@ -84,9 +84,9 @@ export function selectConversationTitleWithSource(
 
 export function collectDetectedConversationMetadata(
   conversations: readonly DetectedConversationIdentityInput[],
+  knownTitles: ReadonlyMap<string, string> = new Map(),
 ): Map<string, DetectedConversationMetadata> {
-  const detected = new Map<string, DetectedConversationMetadata>();
-  const ambiguousConversationIds = new Set<string>();
+  const candidates = new Map<string, DetectedConversationMetadata[]>();
 
   for (const conversation of conversations) {
     if (!conversation.titleResolved) {
@@ -97,16 +97,30 @@ export function collectDetectedConversationMetadata(
       continue;
     }
     const { conversationId, title, url } = normalized.conversation;
-    if (ambiguousConversationIds.has(conversationId)) {
+    const existing = candidates.get(conversationId) ?? [];
+    if (!existing.some((candidate) => candidate.title === title && candidate.url === url)) {
+      existing.push({ title, url });
+    }
+    candidates.set(conversationId, existing);
+  }
+
+  const detected = new Map<string, DetectedConversationMetadata>();
+  for (const [conversationId, choices] of candidates) {
+    if (choices.length === 1) {
+      detected.set(conversationId, choices[0]!);
       continue;
     }
-    const existing = detected.get(conversationId);
-    if (existing && (existing.title !== title || existing.url !== url)) {
-      detected.delete(conversationId);
-      ambiguousConversationIds.add(conversationId);
-      continue;
+
+    // ChatGPT can briefly keep an older duplicate row mounted while replacing a
+    // renamed row. If exactly one visible candidate differs from our cached title,
+    // that changed candidate is the only useful authoritative observation.
+    const knownTitle = knownTitles.get(conversationId);
+    const changedChoices = knownTitle === undefined
+      ? []
+      : choices.filter((choice) => choice.title !== knownTitle);
+    if (changedChoices.length === 1) {
+      detected.set(conversationId, changedChoices[0]!);
     }
-    detected.set(conversationId, { title, url });
   }
 
   return detected;

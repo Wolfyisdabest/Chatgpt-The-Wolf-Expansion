@@ -97,6 +97,45 @@ test("existing metadata refresh updates root and foldered chats without changing
   assert.equal(storedMembership?.sortIndex, originalMembership?.sortIndex);
 });
 
+test("a changed exact-ID native duplicate corrects stale stored metadata without moving the chat", async () => {
+  const { favorites, folders } = repositories();
+  const folder = await folders.createFolder("Folder");
+  await favorites.add(conversation("stale", "Old Name"));
+  await folders.assignConversation(folder.id, conversation("stale", "Old Name"));
+  const detected = collectDetectedConversationMetadata([
+    {
+      conversationId: "stale",
+      title: "Old Name",
+      url: "/c/stale",
+      titleResolved: true,
+    },
+    {
+      conversationId: "stale",
+      title: "New Name",
+      url: "/c/stale",
+      titleResolved: true,
+    },
+  ], new Map([["stale", "Old Name"]]));
+
+  await Promise.all([
+    favorites.updateDetectedTitles(detected),
+    folders.updateDetectedTitles(detected),
+  ]);
+  const storedFavorite = (await favorites.list())[0];
+  const storedMembership = await folders.getMembership("stale");
+  const projection = buildQuickAccessProjection(
+    await favorites.list(),
+    await folders.listFolders(),
+    await folders.listMembership(),
+    { quickAccessEnabled: true, foldersEnabled: true },
+  );
+  assert.equal(storedFavorite?.title, "New Name");
+  assert.equal(storedMembership?.title, "New Name");
+  assert.equal(storedMembership?.folderId, folder.id);
+  assert.equal(projection.folders[0]?.chats[0]?.title, "New Name");
+  assert.equal(projection.looseChats.length, 0);
+});
+
 test("literal Pinned title survives discovery metadata through both repositories", async () => {
   const { favorites, folders } = repositories();
   const folder = await folders.createFolder("Folder");

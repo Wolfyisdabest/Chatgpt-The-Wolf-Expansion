@@ -7,7 +7,7 @@ import {
 } from "../src/features/folders/FoldersRepository";
 import { normalizeFolders } from "../src/storage/migrations";
 import { STORAGE_KEYS } from "../src/storage/schemas";
-import { SettingsService } from "../src/settings/settings";
+import { FolderDisplayOverridesRepository } from "../src/features/folders/FolderDisplayOverridesRepository";
 import { MemoryStorage } from "./helpers/MemoryStorage";
 
 function createRepository(storage = new MemoryStorage()): FoldersRepository {
@@ -61,15 +61,15 @@ test("deleting a folder unfiles direct conversations and reparents direct subfol
 test("deleting a folder removes only its orphaned chat-name display override", async () => {
   const storage = new MemoryStorage();
   const repository = createRepository(storage);
-  const settings = new SettingsService(storage);
+  const overrides = new FolderDisplayOverridesRepository(storage);
   const deleted = await repository.createFolder("Delete");
   const retained = await repository.createFolder("Retain");
-  await settings.setFolderChatNameDisplay(deleted.id, "full");
-  await settings.setFolderChatNameDisplay(retained.id, "compact");
+  await overrides.set(deleted.id, "full");
+  await overrides.set(retained.id, "compact");
 
   await repository.deleteFolder(deleted.id);
 
-  assert.deepEqual((await settings.get()).folders.chatNameDisplayOverrides, {
+  assert.deepEqual(await overrides.get(), {
     [retained.id]: "compact",
   });
 });

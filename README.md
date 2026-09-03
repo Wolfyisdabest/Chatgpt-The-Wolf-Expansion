@@ -6,11 +6,20 @@
 
 ChatGPT: The Wolf Expansion is a free, open-source Firefox and Floorp extension that adds missing power-user features to ChatGPT while preserving ChatGPT's normal interface.
 
-> **Development status:** `v0.2-dev.1` — Quick Access Interop & Tree Polish. This is an early development build intended for manual testing. ChatGPT's DOM changes frequently, so integrations may need ongoing adapter updates.
+> **Development status:** `v0.2-dev.2` — Quick Access Interaction Polish. This is an early development build intended for manual testing. ChatGPT's DOM changes frequently, so integrations may need ongoing adapter updates.
 
 This project is unofficial and is not affiliated with, endorsed by, or sponsored by OpenAI.
 
-## Implemented in v0.2-dev.1
+## Implemented in v0.2-dev.2
+
+- Quick Access conversation actions now open in a Wolf-owned menu anchored to the selected Quick Access row. Rename, Pin/Unpin, Archive, and Delete are stored only as semantic action kinds; activation reacquires the exact live native row and current ChatGPT control/menu, so detached portal nodes are never reused.
+- The exact current `/c/<conversation-id>` receives a subtle Quick Access highlight and `aria-current="page"`, including when it is nested in a folder.
+- Compact title reveal keeps controls usable during its delay, then suppresses nonessential row controls and remeasures against the full title viewport while the title is moving. Controls and pointer interaction return when reveal ends.
+- Native ChatGPT rename drafts are mirrored into the exact Quick Access row as runtime-only previews; completion returns authority to the existing persistent title synchronization flow.
+- Stale title reconciliation now resolves the common old/new duplicate-row transition by preferring the one visible exact-ID title that differs from cached metadata.
+- Quick Access has consistent section-level breathing room before native Pinned, and settings descriptions share the same content-column inset in both settings frontends.
+- Account-owned Quick Access, folder membership, ordering, collapse state, and per-folder display overrides are isolated under opaque local account scopes. Logged-out or unresolved account state fails closed without deleting another account's data; global extension settings remain available.
+- The complete sanitized ChatGPT DOM evidence pack lives under `tests/fixtures/chatgpt-dom/` and is guarded by an automated public-fixture privacy regression scan.
 
 - Branch-aware file-explorer connectors now distinguish continuing and final children, carry only necessary ancestor lines through nested folders, and leave root conversations entirely unconnected.
 - Every Quick Access conversation has a compact `...` action that delegates by exact conversation ID to the real mounted ChatGPT sidebar menu. ChatGPT continues to own Rename, Pin, Archive, Delete, confirmations, positioning, and menu lifecycle.
@@ -103,15 +112,16 @@ Open settings directly from the **Wolf Expansion** settings entry in ChatGPT's s
 2. Add a native conversation with its star, then drag another unstarred native conversation directly into a folder. Confirm both enter Quick Access and render once.
 3. Move a foldered chat to Quick Access root, then unstar a foldered chat. Confirm the first keeps Quick Access membership while the second disappears from Wolf UI and leaves the native ChatGPT chat untouched.
 4. Confirm root folders and loose chats align at one level beneath the quieter Quick Access header, nested content advances one indent per level, and expanded chevrons point down rather than left.
-5. Switch the global Compact/Full default in both settings frontends, then set a parent folder to Full and a child to Inherit/Compact. Verify root chats use the global default and nested inheritance updates immediately.
+5. Switch the global Compact/Full default in both settings frontends, then use in-ChatGPT settings to set a parent folder to Full and a child to Inherit/Compact. Verify root chats use the global default and nested inheritance updates immediately. Folder-specific controls intentionally stay inside the resolved ChatGPT account context.
 6. Enable reduced motion and verify title scrolling and expand/drag transitions stop without changing functionality.
 7. Drag over folders and insertion boundaries; confirm only the current folder highlight or insertion line appears and no blank gaps remain afterward.
 8. Disable Folders and confirm all starred chats appear flat at the root; re-enable it and confirm stored locations return. Disable Quick Access and confirm the entire Wolf organization UI hides without data loss.
 9. Open a folder menu and click outside to close it. Start create/rename, type a draft, and click outside; confirm it cancels while Enter commits, Escape cancels, and ordinary sidebar reconciliation preserves the editor.
 10. Rename both a root Quick Access chat and a foldered chat in ChatGPT without reloading. Confirm the title updates in place, membership/order remain unchanged, and Compact/Full overflow presentation follows the new title.
 11. Rename a conversation to `Pinned: Test Chat` and confirm Wolf Expansion preserves that title literally in the row, tooltip, and accessible label.
-12. Click `...` on a root and foldered Quick Access conversation whose native history row is mounted. Confirm ChatGPT's real menu opens without navigating, contains one set of Wolf actions, and its native Rename updates Quick Access through live title synchronization.
+12. Click `...` on a root and foldered Quick Access conversation whose native history row is mounted. Exercise Rename, direct Pin/Unpin, Archive, and Delete. Confirm each uses the exact conversation, ChatGPT still owns confirmation/editor behavior, and the newly opened live native control is invoked rather than a detached discovery menu.
 13. Try `...` for a virtualized/unmounted native row and confirm the concise unavailable message appears without opening another chat's actions.
+14. With account A signed in, create Quick Access/folder data; log out, sign in as account B, then return to A. At every transition and reload, confirm no prior-account titles flash, B never sees A data, and A's original data returns only when A is resolved again.
 
 Folder metadata lives in extension `storage.local`. Clearing ordinary ChatGPT site data or browser cache is not intended to remove it; explicitly clearing extension data or uninstalling the extension can.
 
@@ -138,6 +148,9 @@ Current storage keys are:
 - `wolfExpansion.folderMembership`
 - `wolfExpansion.foldersUiState`
 - `wolfExpansion.quickAccessUiState`
+- `wolfExpansion.folderChatNameDisplayOverrides`
+- `wolfExpansion.accounts.<opaque-hash>.*` for account-owned variants of the organization keys above
+- `wolfExpansion.legacyAccountData` for conservatively preserved pre-schema-7 unscoped organization data
 
 ## Privacy and security
 
@@ -148,6 +161,8 @@ Current storage keys are:
 - No remote scripts or runtime network dependencies.
 - Host access is limited to `https://chatgpt.com/*`.
 - Extension data remains in Firefox `storage.local` unless a future, explicitly enabled export or sync feature is added.
+- Raw visible account identity evidence is not persisted. A sufficiently strong visible account signal is normalized in memory and hashed locally before it is used as a storage namespace. No cookie, token, auth header, or private endpoint is involved.
+- If a stable account cannot be resolved safely, Wolf hides account-owned organization data instead of guessing. Legacy unscoped data is preserved separately and is never silently assigned to the account that happens to be active during upgrade.
 - Quick Access, folders, ordering, collapse state, and settings do not use ChatGPT storage, `window.localStorage`, `sessionStorage`, or the browser/site cache. Clearing ordinary ChatGPT site data or cache is not intended to clear extension storage. Explicitly clearing extension data or uninstalling the extension can remove it.
 
 ## Known limitations
@@ -156,9 +171,10 @@ Current storage keys are:
 - Row integration first targets native Pin/menu controls and then falls back to a smaller unambiguous row-owned sibling slot. It never uses fixed screen coordinates or overlays native controls.
 - Menu integration requires either an exact sidebar-row opener identity or an overflow-style current-conversation opener on a real `/c/<id>` page. Other ChatGPT menus remain untouched.
 - A conversation deleted on ChatGPT remains in local Quick Access/folder metadata because absence from the visible sidebar is not proof of deletion. Opening it may lead to ChatGPT's missing-conversation page; it can still be removed locally.
-- Conversation titles update only from links ChatGPT currently exposes in the native sidebar. Conflicting duplicate snapshots for one conversation ID are ignored until ChatGPT exposes a stable title.
-- Quick Access native action delegation requires the exact matching ChatGPT history row and native menu trigger to be mounted. Wolf Expansion does not scroll history, navigate, or guess when the row is unavailable.
-- The v0.2-dev.1 branch connectors and native menu/Rename interoperability require signed-in Firefox/Floorp live verification.
+- Conversation titles update only from exact-ID native rows ChatGPT currently exposes. A single changed title can supersede its cached duplicate; genuinely ambiguous conflicting observations are still ignored safely.
+- Native actions in the local Quick Access menu require the exact matching ChatGPT history row and native menu trigger to be mounted. Wolf Expansion does not scroll history, navigate, or guess when the row is unavailable; Wolf-owned organization actions remain usable.
+- Account resolution relies on ordinary visible/semantic ChatGPT UI. Accounts without a sufficiently unique visible profile signal remain fail-closed until stronger visible evidence is present; this avoids cross-account exposure at the cost of temporarily hiding organization UI.
+- The v0.2-dev.2 local menu, native action proxy, rename preview, current-row styling, title reveal geometry, and stale-title reconciliation require signed-in Firefox/Floorp live verification.
 - This milestone assigns each conversation to at most one folder. Folder references do not hide or move ChatGPT's native Recent-chat row.
 
 ## License

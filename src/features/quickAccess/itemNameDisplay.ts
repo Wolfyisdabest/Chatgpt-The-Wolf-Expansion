@@ -27,8 +27,17 @@ export interface OverflowRevealMetrics {
 export type ItemNameRevealPhase = "idle" | "revealing" | "returning";
 
 export interface ItemNameRevealPresentation {
+  controlsSuppressed: boolean;
   fadeVisible: boolean;
+  usesFullWidth: boolean;
   translatePixels: number;
+}
+
+export interface ItemNameReadableViewport {
+  clientWidth: number;
+  clipLeftPixels: number;
+  clipRightPixels: number;
+  inlineEndOcclusion: number;
 }
 
 export const ITEM_NAME_REVEAL_DELAY_MS = 450;
@@ -97,6 +106,36 @@ export function getUnobscuredItemNameWidth(
   return Math.max(0, clientWidth - Math.max(0, inlineEndOcclusion));
 }
 
+export function getItemNameRevealWidth(
+  fullClientWidth: number,
+  idleInlineEndOcclusion: number,
+  revealActive: boolean,
+): number {
+  return revealActive
+    ? Math.max(0, fullClientWidth)
+    : getUnobscuredItemNameWidth(fullClientWidth, idleInlineEndOcclusion);
+}
+
+export function getItemNameReadableViewport(
+  clientWidth: number,
+  viewportStart: number,
+  viewportEnd: number,
+  controlsStart: number,
+  controlsEnd: number,
+  direction: "ltr" | "rtl",
+): ItemNameReadableViewport {
+  const inlineEndOcclusion = direction === "rtl"
+    ? Math.max(0, controlsEnd - viewportStart)
+    : Math.max(0, viewportEnd - controlsStart);
+  const boundedOcclusion = Math.min(Math.max(0, clientWidth), inlineEndOcclusion);
+  return {
+    clientWidth: getUnobscuredItemNameWidth(clientWidth, boundedOcclusion),
+    clipLeftPixels: direction === "rtl" ? boundedOcclusion : 0,
+    clipRightPixels: direction === "rtl" ? 0 : boundedOcclusion,
+    inlineEndOcclusion: boundedOcclusion,
+  };
+}
+
 export function getItemNameRevealPresentation(
   scrollWidth: number,
   clientWidth: number,
@@ -110,7 +149,9 @@ export function getItemNameRevealPresentation(
   );
   const effectivePhase = overflowState.revealMetrics ? phase : "idle";
   return {
+    controlsSuppressed: effectivePhase !== "idle",
     fadeVisible: overflowState.overflowing && effectivePhase === "idle",
+    usesFullWidth: effectivePhase !== "idle",
     translatePixels: effectivePhase === "revealing"
       ? overflowState.revealMetrics?.distancePixels ?? 0
       : 0,

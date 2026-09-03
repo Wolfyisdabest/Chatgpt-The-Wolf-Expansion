@@ -6,15 +6,20 @@ import path from "node:path";
 const root = process.cwd();
 const outputDirectory = path.join(root, ".test-dist");
 const tests = [
+  "tests/accountIdentity.test.ts",
+  "tests/accountScopeTransition.test.ts",
+  "tests/accountScopedStorage.test.ts",
   "tests/conversationIdentity.test.ts",
   "tests/conversationUrl.test.ts",
   "tests/dragIndicatorState.test.ts",
   "tests/favorites.test.ts",
+  "tests/fixturePrivacy.test.ts",
   "tests/folders.test.ts",
   "tests/folderDisplayMode.test.ts",
   "tests/folderNameEditorState.test.ts",
   "tests/hierarchyLayout.test.ts",
   "tests/itemNameDisplay.test.ts",
+  "tests/interactionPolish.test.ts",
   "tests/menuContext.test.ts",
   "tests/nativeConversationActions.test.ts",
   "tests/outsideInteraction.test.ts",

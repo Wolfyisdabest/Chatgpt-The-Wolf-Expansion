@@ -11,9 +11,9 @@ import type { WolfSidebarRoot } from "../../core/WolfSidebarRoot";
 import { debounce } from "../../shared/events";
 import type { Feature, Unsubscribe } from "../../shared/types";
 import type { WolfExpansionSettings } from "../../storage/schemas";
-import { SettingsService } from "../../settings/settings";
 import { FavoritesRepository } from "../favorites/FavoritesRepository";
 import { FoldersRepository } from "../folders/FoldersRepository";
+import { FolderDisplayOverridesRepository } from "../folders/FolderDisplayOverridesRepository";
 import { QuickAccessMenuIntegration } from "./QuickAccessMenuIntegration";
 import { QuickAccessMembershipService } from "./QuickAccessMembershipService";
 import { buildQuickAccessProjection } from "./quickAccessProjection";
@@ -45,8 +45,8 @@ export class QuickAccessFeature implements Feature {
     private readonly adapter: ChatGPTAdapter,
     private readonly favoritesRepository: FavoritesRepository,
     private readonly foldersRepository: FoldersRepository,
+    private readonly folderDisplayOverridesRepository: FolderDisplayOverridesRepository,
     private readonly uiStateRepository: QuickAccessUiStateRepository,
-    private readonly settingsService: SettingsService,
     sidebarRoot: WolfSidebarRoot,
     private readonly logger: Logger,
   ) {
@@ -92,8 +92,7 @@ export class QuickAccessFeature implements Feature {
           this.foldersRepository.reorderFolder(folderId, direction),
         onDeleteFolder: (folderId) => this.foldersRepository.deleteFolder(folderId),
         onSetFolderChatNameDisplay: async (folderId, mode) => {
-          const settings = await this.settingsService.setFolderChatNameDisplay(folderId, mode);
-          await this.setSettings(settings);
+          await this.folderDisplayOverridesRepository.set(folderId, mode);
         },
         onAssignConversation: async (folderId, conversation, source) => {
           await this.membershipService.assignToFolder(folderId, conversation);
@@ -123,6 +122,9 @@ export class QuickAccessFeature implements Feature {
           }
           await this.membershipService.toggle(current);
         },
+        onOpenConversationMenu: (conversation, anchor) => {
+          this.menuIntegration.openLocalMenu(conversation, anchor);
+        },
       },
       sidebarRoot,
       logger,
@@ -132,6 +134,18 @@ export class QuickAccessFeature implements Feature {
       favoritesRepository,
       foldersRepository,
       this.membershipService,
+      {
+        onNativeRenameDraft: (conversationId, draft) => {
+          this.sidebar.setConversationTitlePreview(conversationId, draft);
+        },
+        onNativeRenameFinished: async (conversationId) => {
+          await new Promise<void>((resolve) => {
+            window.requestAnimationFrame(() => resolve());
+          });
+          await this.refresh("sidebar");
+          this.sidebar.clearConversationTitlePreview(conversationId);
+        },
+      },
       logger,
     );
   }
@@ -164,6 +178,7 @@ export class QuickAccessFeature implements Feature {
       this.adapter.watchNavigation(this.scheduleSidebarRefresh),
       this.favoritesRepository.subscribe(this.scheduleRepositoryRefresh),
       this.foldersRepository.subscribe(this.scheduleRepositoryRefresh),
+      this.folderDisplayOverridesRepository.subscribe(this.scheduleRepositoryRefresh),
     );
     this.menuIntegration.enable();
     await this.refresh("explicit");
@@ -186,6 +201,10 @@ export class QuickAccessFeature implements Feature {
 
   public destroy(): void {
     this.disable();
+  }
+
+  public async whenIdle(): Promise<void> {
+    await this.refreshInFlight;
   }
 
   private async refresh(reason: QuickAccessRefreshReason): Promise<void> {
@@ -219,7 +238,7 @@ export class QuickAccessFeature implements Feature {
     if (!this.enabled || !settings) {
       return;
     }
-    if (!settings.favorites.enabled) {
+    if (!settings.favorites.enabled && !settings.folders.enabled) {
       this.sidebar.remove();
       return;
     }
@@ -227,9 +246,41 @@ export class QuickAccessFeature implements Feature {
       const references = this.adapter.findConversationLinks()
         .map((link) => this.adapter.getConversationReference(link))
         .filter((reference): reference is ConversationReference => reference !== null);
+      const cachedTitles = new Map<string, string>();
+      if (work.ingestDetectedTitles) {
+        const [cachedFavorites, cachedMemberships] = await Promise.all([
+          this.favoritesRepository.list(),
+          settings.folders.enabled
+            ? this.foldersRepository.listMembership()
+            : Promise.resolve([]),
+        ]);
+        cachedFavorites.forEach((favorite) => {
+          cachedTitles.set(favorite.conversationId, favorite.title);
+        });
+        cachedMemberships.forEach((membership) => {
+          if (!cachedTitles.has(membership.conversationId)) {
+            cachedTitles.set(membership.conversationId, membership.title);
+          }
+        });
+      }
       const detected = work.ingestDetectedTitles
-        ? collectDetectedConversationMetadata(references)
+        ? collectDetectedConversationMetadata(references, cachedTitles)
         : new Map<string, { title: string; url: string }>();
+      if (work.ingestDetectedTitles) {
+        const current = this.adapter.getCurrentConversationIdentity();
+        if (
+          current &&
+          !detected.has(current.conversationId) &&
+          !references.some((reference) =>
+            reference.conversationId === current.conversationId) &&
+          current.title !== "Current conversation"
+        ) {
+          detected.set(current.conversationId, {
+            title: current.title,
+            url: current.url,
+          });
+        }
+      }
       const diagnosticConversationIds = work.ingestDetectedTitles
         ? await this.logDetectedTitleDiagnostics(references, detected, settings)
         : new Set<string>();
@@ -241,11 +292,18 @@ export class QuickAccessFeature implements Feature {
             : Promise.resolve(false),
         ]);
       }
-      const [favorites, folders, memberships] = await Promise.all([
+      const [favorites, folders, memberships, folderChatNameDisplayOverrides] = await Promise.all([
         this.favoritesRepository.list(),
         settings.folders.enabled ? this.foldersRepository.listFolders() : Promise.resolve([]),
         settings.folders.enabled ? this.foldersRepository.listMembership() : Promise.resolve([]),
+        settings.folders.enabled
+          ? this.folderDisplayOverridesRepository.get()
+          : Promise.resolve({}),
       ]);
+      const displaySettings: WolfExpansionSettings = {
+        ...settings,
+        folders: { ...settings.folders, chatNameDisplayOverrides: folderChatNameDisplayOverrides },
+      };
       const displayFolders = settings.folders.rememberCollapsed
         ? folders
         : folders.map((folder) => ({
@@ -256,19 +314,16 @@ export class QuickAccessFeature implements Feature {
         quickAccessEnabled: settings.favorites.enabled,
         foldersEnabled: settings.folders.enabled,
         globalItemNameDisplay: settings.favorites.itemNameDisplay,
-        folderChatNameDisplayOverrides: settings.folders.chatNameDisplayOverrides,
+        folderChatNameDisplayOverrides,
       });
       const currentId = this.adapter.getCurrentConversationId();
-      const currentIsQuickAccess = currentId
-        ? favorites.some((favorite) => favorite.conversationId === currentId)
-        : false;
       if (!this.enabled || !this.refreshCoordinator.isLatest(work.generation)) {
         this.logger.debug("Quick Access render deferred for a newer refresh generation.", {
           generation: work.generation,
         });
         return;
       }
-      this.sidebar.render(projection, settings, this.collapsed, currentIsQuickAccess);
+      this.sidebar.render(projection, displaySettings, this.collapsed, currentId);
       this.sidebar.syncNativeRows(
         references,
         new Set(favorites.map((favorite) => favorite.conversationId)),

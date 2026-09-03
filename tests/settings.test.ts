@@ -130,7 +130,7 @@ test("shares one authoritative settings record between service instances", async
   assert.equal(synchronized.favorites.showIcon, false);
 });
 
-test("both settings frontends expose the shared global and folder override controls", () => {
+test("both frontends expose global display settings while account folder overrides fail closed", () => {
   const inChat = readFileSync(
     path.join(process.cwd(), "src/features/settings/InChatSettingsFeature.ts"),
     "utf8",
@@ -142,5 +142,6 @@ test("both settings frontends expose the shared global and folder override contr
   assert.match(inChat, /Default chat-name display/);
   assert.match(inChat, /Manage folder overrides/);
   assert.match(preferences, /Default chat-name display/);
-  assert.match(preferences, /Manage folder overrides/);
+  assert.match(preferences, /Manage account-specific folder overrides inside ChatGPT/);
+  assert.doesNotMatch(preferences, /id="folder-overrides-content"/);
 });
